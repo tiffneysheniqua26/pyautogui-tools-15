@@ -2,36 +2,36 @@ import sys
 import time
 from typing import Optional, TextIO
 
-class ClickerLogger:
-    """Custom creative logger for pyautogui-tools-15 autoclicker."""
-    
-    def __init__(self, stream: TextIO = sys.stdout, prefix: str = "[AUTO]") -> None:
-        self.stream: TextIO = stream
-        self.prefix: str = prefix
-        self._enabled: bool = True
 
-    def toggle(self, state: Optional[bool] = None) -> bool:
-        """Toggle logging state or set it explicitly."""
-        self._enabled = state if state is not None else not self._enabled
-        return self._enabled
+class ClickerLogger:
+    """An unconventional yet functional logging utility for the autoclicker."""
+
+    def __init__(self, stream: TextIO = sys.stdout, prefix: str = "[AUTOCLICKER]") -> None:
+        self.stream = stream
+        self.prefix = prefix
 
     def log(self, message: str, level: str = "INFO") -> None:
-        """Emit a formatted log message if logging is enabled."""
-        if not self._enabled:
-            return
-        timestamp: str = time.strftime("%H:%M:%S", time.localtime())
-        formatted: str = f"{self.prefix} ({timestamp}) {{{level}}}: {message}\n"
-        self.stream.write(formatted)
+        """Output a formatted log message with a timestamp."""
+        timestamp: float = time.time()
+        formatted_msg = f"{self.prefix} {{{timestamp:.4f}}} [{level.upper()}] -> {message}\n"
+        self.stream.write(formatted_msg)
         self.stream.flush()
 
-    def success(self, message: str) -> None:
-        """Log a success event with custom flair."""
-        self.log(f"✨ SUCCESS -> {message}", level="OK")
-
-    def warning(self, message: str) -> None:
-        """Log a warning event."""
-        self.log(f"⚠️ WARNING -> {message}", level="WARN")
+    def debug(self, message: str) -> None:
+        """Log a debug-level message."""
+        self.log(message, level="DEBUG")
 
     def error(self, message: str) -> None:
-        """Log a critical error event."""
-        self.log(f"❌ CRITICAL -> {message}", level="ERROR")
+        """Log an error-level message."""
+        self.log(message, level="ERROR")
+
+
+_default_logger: Optional[ClickerLogger] = None
+
+
+def get_logger() -> ClickerLogger:
+    """Retrieve or initialize the singleton logger instance."""
+    global _default_logger
+    if _default_logger is None:
+        _default_logger = ClickerLogger()
+    return _default_logger
