@@ -1,74 +1,70 @@
 import pyautogui
-from typing import Tuple, Dict, Any, Callable
+from typing import Tuple, Any, Optional, Dict, Callable
 
-def validate_screen_position(x: int, y: int) -> Tuple[int, int]:
-    """Validate and clamp click coordinates to screen dimensions.
-    
-    Uses pyautogui to get current screen size for bounds checking.
-    Returns adjusted position if out of bounds.
-    """
+def validate_positive(value: Any) -> bool:
+    if isinstance(value, (int, float)):
+        return value > 0
+    return False
+
+def validate_non_negative(value: Any) -> bool:
+    if isinstance(value, (int, float)):
+        return value >= 0
+    return False
+
+def validate_integer(value: Any) -> bool:
+    return isinstance(value, int)
+
+def validate_string_in_set(value: Any, valid_set: set) -> bool:
+    if isinstance(value, str):
+        return value.lower() in valid_set
+    return False
+
+def validate_tuple_of_ints(value: Any, length: int = 2) -> bool:
+    if isinstance(value, (tuple, list)) and len(value) == length:
+        return all(isinstance(item, int) for item in value)
+    return False
+
+def validate_screen_bounds(position: Tuple[int, int]) -> bool:
+    if not validate_tuple_of_ints(position):
+        return False
+    x, y = position
     width, height = pyautogui.size()
-    x = max(0, min(int(x), width - 1))
-    y = max(0, min(int(y), height - 1))
-    return x, y
+    return 0 <= x < width and 0 <= y < height
 
-def validate_click_interval(interval: float) -> float:
-    """Ensure click interval meets minimum threshold for stability.
-    
-    Returns 0.05 if provided value is too small.
-    """
-    min_interval = 0.05
-    if interval < min_interval:
-        return min_interval
-    return float(interval)
+def validate_button(button: str) -> bool:
+    return validate_string_in_set(button, {'left', 'right', 'middle'})
 
-def validate_click_count(count: int) -> int:
-    """Validate click repetition count is at least one.
-    
-    Converts negative or zero to 1.
-    """
-    if count <= 0:
-        return 1
-    return int(count)
+def validate_click_count(count: int) -> bool:
+    return validate_integer(count) and validate_positive(count)
 
-def validate_button(button: str) -> str:
-    """Confirm mouse button is one of the supported types.
-    
-    Falls back to 'left' for invalid inputs.
-    """
-    supported = {"left", "right", "middle"}
-    normalized = button.lower().strip()
-    if normalized in supported:
-        return normalized
-    return "left"
+def validate_interval(interval: float) -> bool:
+    return validate_non_negative(interval)
 
-def get_validated_click_config(
-    x: int, y: int, interval: float, count: int, button: str
-) -> Dict[str, Any]:
-    """Aggregate validation for all autoclick parameters.
-    
-    Creative unusual approach: applies validators via mapping.
-    """
-    param_map: Dict[str, Callable[[Any], Any]] = {
-        "position": lambda p: validate_screen_position(*p),
-        "interval": validate_click_interval,
-        "count": validate_click_count,
-        "button": validate_button,
+def validate_duration(duration: Optional[float]) -> bool:
+    if duration is None:
+        return True
+    return validate_non_negative(duration)
+
+def validate_autoclicker_settings(
+    position: Tuple[int, int],
+    clicks: int = 1,
+    interval: float = 0.1,
+    button: str = 'left',
+    duration: Optional[float] = None
+) -> bool:
+    validation_map: Dict[str, Callable] = {
+        'position': lambda p: validate_tuple_of_ints(p) and validate_screen_bounds(p),
+        'clicks': lambda c: validate_click_count(c),
+        'interval': lambda i: validate_interval(i),
+        'button': lambda b: validate_button(b),
+        'duration': lambda d: validate_duration(d)
     }
-    raw_params: Dict[str, Any] = {
-        "position": (x, y),
-        "interval": interval,
-        "count": count,
-        "button": button,
+    settings: Dict[str, Any] = {
+        'position': position,
+        'clicks': clicks,
+        'interval': interval,
+        'button': button,
+        'duration': duration
     }
-    validated: Dict[str, Any] = {}
-    for key, validator in param_map.items():
-        validated[key] = validator(raw_params[key])
-    return validated
-
-def prepare_autoclicker(x: int, y: int, interval: float = 0.1, count: int = 1, button: str = "left") -> Dict[str, Any]:
-    """Prepare validated configuration for autoclicker execution.
-    
-    Calls the config validator internally.
-    """
-    return get_validated_click_config(x, y, interval, count, button)
+    validation_results = [validation_map[key](val) for key, val in settings.items() if key in validation_map]
+    return all(validation_results)
