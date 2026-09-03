@@ -1,51 +1,48 @@
-import pyautogui
-import time
 import random
+from typing import Generator, Tuple, List
 
-def get_validators():
-    return [
-        lambda data: isinstance(data, dict),
-        lambda data: all(key in data for key in ['x', 'y', 'clicks', 'interval']),
-        lambda data: all(isinstance(data[key], (int, float)) for key in ['x', 'y', 'interval']),
-        lambda data: isinstance(data.get('clicks'), int),
-        lambda data: data['x'] >= 0 and data['y'] >= 0 and data['clicks'] > 0 and data['interval'] >= 0,
-    ]
+Coordinate = Tuple[int, int]
+TargetDelayPair = Tuple[Coordinate, float]
 
-def validate_in_loop(click_data):
-    validators = get_validators()
-    for validator in validators:
-        if not validator(click_data):
-            return False
-    return True
+class ClickingPathProcessor:
+    """
+    A processor that generates click paths with organic human-like micro-jitters.
 
-def process_clicks(click_data):
-    if not validate_in_loop(click_data):
-        return False
-    x = float(click_data['x'])
-    y = float(click_data['y'])
-    clicks = click_data['clicks']
-    interval = float(click_data['interval'])
-    offset_x = random.gauss(0, 1)
-    offset_y = random.gauss(0, 1)
-    pyautogui.moveTo(x + offset_x, y + offset_y, duration=0.05)
-    pyautogui.click(clicks=clicks)
-    time.sleep(interval)
-    return True
+    Transforms strict coordinate pathways into slightly randomized coordinates
+    and interval delays to mimic organic manual interactions, bypassing basic
+    bot-detection patterns during pyautogui automation cycles.
+    """
 
-def main_processing_loop():
-    sample_tasks = [
-        {"x": 150, "y": 250, "clicks": 2, "interval": 0.5},
-        {"x": 400, "y": 300, "clicks": 1, "interval": 1.0},
-        {"x": "bad", "y": 100, "clicks": 3, "interval": 0.2},
-        {"x": 200, "y": 500, "clicks": 0, "interval": 0.3},
-        {"x": 600, "y": 700, "clicks": 5, "interval": 0.1},
-    ]
-    for task in sample_tasks:
-        if process_clicks(task):
-            print(f"Processed click at ({task.get('x')}, {task.get('y')})")
-        else:
-            print(f"Skipped invalid input: {task}")
-        time.sleep(0.2)
+    def __init__(self, raw_points: List[Coordinate], base_delay: float = 0.1) -> None:
+        """
+        Initialize the path processor with designated targets and baseline delay.
 
-if __name__ == "__main__":
-    main_processing_loop()
+        :param raw_points: A list of exact (x, y) coordinates to click.
+        :param base_delay: Minimum sleep duration (in seconds) between calculated actions.
+        """
+        self.raw_points: List[Coordinate] = raw_points
+        self.base_delay: float = base_delay
+
+    def humanized_stream(self, jitter_radius: int = 3) -> Generator[TargetDelayPair, None, None]:
+        """
+        Generate coordinates altered by a slight, randomized Gaussian shift.
+
+        Yields pairs containing the perturbed (x, y) coordinate pair and the
+        fluctuating timing interval for the pyautogui driver to consume.
+
+        :param jitter_radius: Standard deviation limit of the Gaussian distribution offset.
+        :return: Generator yielding tuple of shifted (X, Y) and float sleep time.
+        """
+        for x, y in self.raw_points:
+            radius = random.gauss(0, jitter_radius)
+            angle = random.uniform(0, 6.28318)
+
+            # Introduce slight organic skew on the target offsets
+            jitter_x = int(round(x + radius * abs(angle - 3.14159)))
+            jitter_y = int(round(y + radius * abs(angle - 1.57079)))
+
+            # Add varying hesitation times targeting a non-linear decay distribution
+            human_hesitation = abs(random.normalvariate(0.0, self.base_delay * 0.25))
+            current_delay = max(0.01, self.base_delay + human_hesitation)
+
+            yield (jitter_x, jitter_y), current_delay
