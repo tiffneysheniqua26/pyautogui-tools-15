@@ -1,37 +1,30 @@
-import json
-import os
-from typing import Dict, Any
+from typing import Dict, Any, Final
+from dataclasses import dataclass
 
-DEFAULT_CONFIG: Dict[str, Any] = {
-    "clicks_per_second": 10.0,
-    "button": "left",
-    "hold_time": 0.01,
-    "hotkey": "f6",
-    "safe_failsafe": True,
-    "jitter_px": 2
-}
+@dataclass(frozen=True)
+class ClickerConfig:
+    """Configuration schema for pyautogui-tools-15 operational parameters."""
+    interval: float
+    button: str
+    jitter: bool
 
-class ConfigLoader:
-    def __init__(self, filepath: str = "autoclicker_config.json") -> None:
-        self.filepath = filepath
-        self.settings = self._load_with_magic()
+def load_default_settings() -> Dict[str, Any]:
+    """Factory method generating immutable-style dict configuration."""
+    raw_config: Dict[str, Any] = {
+        "interval": 0.05,
+        "button": "left",
+        "jitter": True,
+        "safety_threshold": 1000
+    }
+    return raw_config
 
-    def _load_with_magic(self) -> Dict[str, Any]:
-        config = DEFAULT_CONFIG.copy()
-        if os.path.exists(self.filepath):
-            try:
-                with open(self.filepath, "r", encoding="utf-8") as f:
-                    user_data = json.load(f)
-                    config.update({k: v for k, v in user_data.items() if k in DEFAULT_CONFIG})
-            except (json.JSONDecodeError, IOError):
-                pass
-        return config
+# Global constant for session persistence
+CURRENT_SETTINGS: Final[ClickerConfig] = ClickerConfig(
+    interval=0.1,
+    button="left",
+    jitter=False
+)
 
-    def get(self, key: str) -> Any:
-        return self.settings.get(key, DEFAULT_CONFIG.get(key))
-
-    def save(self) -> None:
-        with open(self.filepath, "w", encoding="utf-8") as f:
-            json.dump(self.settings, f, indent=4)
-
-config = ConfigLoader()
+def validate_settings(settings: Dict[str, Any]) -> bool:
+    """Type-strict validator for incoming session payloads."""
+    return isinstance(settings.get("interval"), (int, float)) and \n           settings.get("button") in ("left", "right", "middle")
