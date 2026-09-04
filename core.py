@@ -1,23 +1,35 @@
 import time
-import functools
+import pyautogui
 
-class ClickOptimizer:
+class OptimizedClickEngine:
+    """High-performance click dispatcher utilizing precise frame timing."""
+    
     def __init__(self, target_cps: int = 100):
-        self.delay = 1.0 / max(target_cps, 1)
-        self._last_click = time.perf_counter()
+        self.target_cps = max(1, target_cps)
+        self.frame_time = 1.0 / self.target_cps
+        self._active = False
+        pyautogui.PAUSE = 0.00001
+        pyautogui.FAILSAFE = True
 
-    def __call__(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+    def execute_burst(self, x: int, y: int, count: int) -> int:
+        self._active = True
+        executed = 0
+        next_tick = time.perf_counter()
+        
+        # Pre-cache click position pointer to eliminate internal lookup overhead
+        click_func = pyautogui.click
+        
+        while self._active and executed < count:
             now = time.perf_counter()
-            elapsed = now - self._last_click
-            if elapsed < self.delay:
-                time.sleep(self.delay - elapsed)
-            result = func(*args, **kwargs)
-            self._last_click = time.perf_counter()
-            return result
-        return wrapper
+            if now >= next_tick:
+                click_func(x=x, y=y, _pause=False)
+                executed += 1
+                next_tick += self.frame_time
+            else:
+                # Yield CPU quantum without losing timing resolution
+                time.sleep(max(0, next_tick - now))
+                
+        return executed
 
-@ClickOptimizer(target_cps=250)
-def hyper_click(x: int, y: int) -> tuple:
-    return (x, y)
+    def stop(self) -> None:
+        self._active = False
