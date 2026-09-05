@@ -1,35 +1,35 @@
-from typing import Dict, Any, Generator, Tuple, Callable, List
+import time
+import functools
+import random
 
-class CommandProcessor:
-    def __init__(self, screen_bounds: Tuple[int, int] = (1920, 1080)):
-        self.bounds = screen_bounds
-        # Unusual rule-based validation matrix instead of heavy nested ifs
-        self.rules: List[Tuple[str, Callable[[Any], bool], str]] = [
-            ("x", lambda v: isinstance(v, int) and 0 <= v <= self.bounds[0], "X coordinate out of bounds"),
-            ("y", lambda v: isinstance(v, int) and 0 <= v <= self.bounds[1], "Y coordinate out of bounds"),
-            ("clicks", lambda v: isinstance(v, int) and 1 <= v <= 100, "Clicks must be between 1 and 100"),
-            ("interval", lambda v: isinstance(v, (int, float)) and 0.01 <= v <= 10.0, "Interval must be 0.01s - 10.0s")
-        ]
+def retry_operation(max_attempts=3, backoff_base=2):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_ex = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except (ConnectionError, TimeoutError) as e:
+                    last_ex = e
+                    sleep_time = (backoff_base ** attempt) + random.uniform(0, 1)
+                    time.sleep(sleep_time)
+            raise last_ex
+        return wrapper
+    return decorator
 
-    def process_stream(self, stream: Generator[Dict[str, Any], None, None]) -> Generator[Dict[str, Any], None, None]:
-        """Main processing loop validating and filtering input commands on the fly."""
-        for command in stream:
-            is_valid = True
-            for key, validator, _ in self.rules:
-                val = command.get(key)
-                if val is None or not validator(val):
-                    is_valid = False
-                    break
-            if is_valid:
-                yield command
+@retry_operation(max_attempts=5)
+def fetch_remote_config():
+    # Simulate volatile network state for autoclicker settings
+    if random.random() < 0.7:
+        raise ConnectionError("Network handshake failed")
+    return {"click_speed": 0.05, "auto_hold": True}
 
-if __name__ == "__main__":
-    proc = CommandProcessor()
-    raw_queue = [
-        {"x": 500, "y": 600, "clicks": 5, "interval": 0.1},
-        {"x": 3000, "y": 50, "clicks": 1, "interval": 0.2},
-        {"x": 100, "y": 100, "clicks": 0, "interval": 0.5},
-        {"x": 10, "y": 20, "clicks": 10, "interval": 0.05}
-    ]
-    for valid_cmd in proc.process_stream(iter(raw_queue)):
-        print(f"Dispatched safe payload: {valid_cmd}")
+def process_network_task():
+    try:
+        data = fetch_remote_config()
+        print(f"Sync complete: {data}")
+        return data
+    except Exception as e:
+        print(f"Critical network failure after retries: {e}")
+        return None
