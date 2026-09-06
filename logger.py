@@ -1,36 +1,36 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import os
+from logging.handlers import RotatingFileHandler
+from datetime import datetime
 
-def setup_logger(name: str = "pyautogui-tools-15", log_file: str = "app.log") -> logging.Logger:
-    """
-    A somewhat dramatic, rotating logger instance
-    that keeps track of our autoclicker's shenanigans.
-    """
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+class ClickerLogger:
+    def __init__(self, name='pyautogui-tools', log_dir='logs'):
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
 
-    if not logger.handlers:
-        formatter = logging.Formatter(
-            "%(asctime)s [%(levelname)s] (%(name)s) -> %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S"
-        )
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(logging.DEBUG)
 
-        # 5MB rotation policy to prevent disk flooding
-        file_handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=5 * 1024 * 1024, 
+        fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+        # Rotating file handler: 5MB per file, keep 3 backups
+        file_path = os.path.join(log_dir, f'session_{datetime.now().strftime("%Y%m%d")}.log')
+        handler = RotatingFileHandler(
+            file_path, 
+            maxBytes=5*1024*1024, 
             backupCount=3
         )
-        file_handler.setFormatter(formatter)
+        handler.setFormatter(fmt)
 
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(formatter)
+        console = logging.StreamHandler()
+        console.setFormatter(fmt)
 
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
+        if not self.logger.handlers:
+            self.logger.addHandler(handler)
+            self.logger.addHandler(console)
 
-    return logger
+    def get_logger(self):
+        return self.logger
 
-# Instantiate the singleton instance for global module access
-automation_logger = setup_logger()
+# Singleton-ish instance for easy import
+app_logger = ClickerLogger().get_logger()
