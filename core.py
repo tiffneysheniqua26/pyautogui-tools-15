@@ -1,35 +1,37 @@
-import time
 import pyautogui
+import time
+import threading
 
-class OptimizedClickEngine:
-    """High-performance click dispatcher utilizing precise frame timing."""
-    
-    def __init__(self, target_cps: int = 100):
-        self.target_cps = max(1, target_cps)
-        self.frame_time = 1.0 / self.target_cps
-        self._active = False
-        pyautogui.PAUSE = 0.00001
-        pyautogui.FAILSAFE = True
+class AutoClicker:
+    def __init__(self, interval=0.1):
+        self.interval = interval
+        self.running = False
+        self._lock = threading.Lock()
 
-    def execute_burst(self, x: int, y: int, count: int) -> int:
-        self._active = True
-        executed = 0
-        next_tick = time.perf_counter()
-        
-        # Pre-cache click position pointer to eliminate internal lookup overhead
-        click_func = pyautogui.click
-        
-        while self._active and executed < count:
-            now = time.perf_counter()
-            if now >= next_tick:
-                click_func(x=x, y=y, _pause=False)
-                executed += 1
-                next_tick += self.frame_time
-            else:
-                # Yield CPU quantum without losing timing resolution
-                time.sleep(max(0, next_tick - now))
-                
-        return executed
+    def _perform_click(self):
+        while self.running:
+            pyautogui.click()
+            time.sleep(self.interval)
 
-    def stop(self) -> None:
-        self._active = False
+    def toggle(self):
+        with self._lock:
+            self.running = not self.running
+            if self.running:
+                threading.Thread(target=self._perform_click, daemon=True).start()
+
+class ClickManager:
+    @staticmethod
+    def execute_sequence(coords_list):
+        for x, y in coords_list:
+            pyautogui.moveTo(x, y)
+            pyautogui.click()
+
+def emergency_stop():
+    pyautogui.FAILSAFE = True
+
+if __name__ == '__main__':
+    emergency_stop()
+    clicker = AutoClicker(0.5)
+    clicker.toggle()
+    time.sleep(2)
+    clicker.toggle()
