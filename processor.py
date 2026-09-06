@@ -1,35 +1,40 @@
-import time
-import functools
-import random
+import json
+import os
+from typing import Dict, Any
 
-def retry_operation(max_attempts=3, backoff_base=2):
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            last_ex = None
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except (ConnectionError, TimeoutError) as e:
-                    last_ex = e
-                    sleep_time = (backoff_base ** attempt) + random.uniform(0, 1)
-                    time.sleep(sleep_time)
-            raise last_ex
-        return wrapper
-    return decorator
+class ConfigManager:
+    def __init__(self, config_path: str = "settings.json"):
+        self.path = config_path
+        self.defaults = {
+            "interval": 0.1,
+            "clicks": 1,
+            "button": "left",
+            "jitter": False
+        }
 
-@retry_operation(max_attempts=5)
-def fetch_remote_config():
-    # Simulate volatile network state for autoclicker settings
-    if random.random() < 0.7:
-        raise ConnectionError("Network handshake failed")
-    return {"click_speed": 0.05, "auto_hold": True}
+    def load_config(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            self._write_defaults()
+            return self.defaults
+        
+        try:
+            with open(self.path, "r") as f:
+                user_cfg = json.load(f)
+                return {**self.defaults, **user_cfg}
+        except (json.JSONDecodeError, IOError):
+            return self.defaults
 
-def process_network_task():
-    try:
-        data = fetch_remote_config()
-        print(f"Sync complete: {data}")
-        return data
-    except Exception as e:
-        print(f"Critical network failure after retries: {e}")
-        return None
+    def _write_defaults(self):
+        try:
+            with open(self.path, "w") as f:
+                json.dump(self.defaults, f, indent=4)
+        except IOError:
+            pass
+
+    def sync_config(self, new_data: Dict[str, Any]):
+        current = self.load_config()
+        current.update(new_data)
+        with open(self.path, "w") as f:
+            json.dump(current, f, indent=4)
+
+config_loader = ConfigManager()
