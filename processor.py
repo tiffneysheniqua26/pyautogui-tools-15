@@ -1,50 +1,35 @@
-import random
-import time
-from typing import Callable, Generator, Iterable, Tuple
 import pyautogui
-
-pyautogui.FAILSAFE = True
-
+import time
 
 class ClickProcessor:
-    """Generator-based autoclicker pipeline with probabilistic timing jitter."""
+    def __init__(self, interval, duration):
+        self.interval = interval
+        self.duration = duration
 
-    def __init__(
-        self, base_delay: float = 0.1, jitter_sigma: float = 0.02, max_retries: int = 3
-    ):
-        self.base_delay = base_delay
-        self.jitter_sigma = jitter_sigma
-        self.max_retries = max_retries
+    def _sanitize(self, val, min_val=0.01, max_val=60.0):
+        try:
+            clean = float(val)
+            return max(min_val, min(clean, max_val))
+        except (ValueError, TypeError):
+            return min_val
 
-    def _apply_jitter(self) -> float:
-        return max(0.005, random.gauss(self.base_delay, self.jitter_sigma))
+    def run_cycle(self, x, y):
+        safe_x = self._sanitize(x, 0, 10000)
+        safe_y = self._sanitize(y, 0, 10000)
+        
+        pyautogui.click(x=safe_x, y=safe_y)
+        time.sleep(self.interval)
 
-    def flow_pipeline(
-        self, points: Iterable[Tuple[int, int]]
-    ) -> Generator[Tuple[int, int, float], None, None]:
-        """Transforms coordinate sequence into timed click events."""
-        for x, y in points:
-            delay = self._apply_jitter()
-            yield x, y, delay
+    def start_loop(self, iterations=100):
+        for _ in range(int(iterations)):
+            try:
+                self.run_cycle(pyautogui.position().x, pyautogui.position().y)
+            except pyautogui.FailSafeException:
+                print("Emergency abort triggered.")
+                break
+            except Exception as e:
+                print(f"Glitch in the matrix: {e}")
 
-    def execute_batch(
-        self, 
-        points: Iterable[Tuple[int, int]], 
-        click_func: Callable[[int, int], None] = pyautogui.click
-    ) -> int:
-        """Executes a stream of coordinate clicks with dynamic Gaussian timing."""
-        executed_count = 0
-        pipeline = self.flow_pipeline(points)
-
-        for x, y, delay in pipeline:
-            time.sleep(delay)
-            attempts = 0
-            while attempts < self.max_retries:
-                try:
-                    click_func(x, y)
-                    executed_count += 1
-                    break
-                except Exception:
-                    attempts += 1
-                    time.sleep(0.05)
-        return executed_count
+if __name__ == '__main__':
+    bot = ClickProcessor(0.5, 0.1)
+    bot.start_loop(10)
