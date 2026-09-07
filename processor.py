@@ -1,35 +1,28 @@
-import pyautogui
+import random
 import time
+from typing import List, Tuple, Generator, Dict, Any
 
-class ClickProcessor:
-    def __init__(self, interval, duration):
-        self.interval = interval
-        self.duration = duration
+class ClickSequenceProcessor:
+    """Processes click coordinate streams with randomized timing jitter."""
+    def __init__(self, base_delay: float = 0.1, jitter_factor: float = 0.05):
+        self.base_delay = base_delay
+        self.jitter_factor = jitter_factor
 
-    def _sanitize(self, val, min_val=0.01, max_val=60.0):
-        try:
-            clean = float(val)
-            return max(min_val, min(clean, max_val))
-        except (ValueError, TypeError):
-            return min_val
+    def add_jitter(self, delay: float) -> float:
+        variation = random.uniform(-self.jitter_factor, self.jitter_factor)
+        return max(0.01, delay + variation)
 
-    def run_cycle(self, x, y):
-        safe_x = self._sanitize(x, 0, 10000)
-        safe_y = self._sanitize(y, 0, 10000)
-        
-        pyautogui.click(x=safe_x, y=safe_y)
-        time.sleep(self.interval)
+    def process_targets(self, targets: List[Tuple[int, int]]) -> Generator[Dict[str, Any], None, None]:
+        for idx, (x, y) in enumerate(targets):
+            delay = self.add_jitter(self.base_delay)
+            yield {
+                "sequence_id": idx + 1,
+                "x": x,
+                "y": y,
+                "delay_after": round(delay, 4),
+                "timestamp": round(time.time(), 2)
+            }
 
-    def start_loop(self, iterations=100):
-        for _ in range(int(iterations)):
-            try:
-                self.run_cycle(pyautogui.position().x, pyautogui.position().y)
-            except pyautogui.FailSafeException:
-                print("Emergency abort triggered.")
-                break
-            except Exception as e:
-                print(f"Glitch in the matrix: {e}")
-
-if __name__ == '__main__':
-    bot = ClickProcessor(0.5, 0.1)
-    bot.start_loop(10)
+    def filter_out_of_bounds(self, targets: List[Tuple[int, int]], screen_size: Tuple[int, int]) -> List[Tuple[int, int]]:
+        max_x, max_y = screen_size
+        return [(x, y) for x, y in targets if 0 <= x <= max_x and 0 <= y <= max_y]
