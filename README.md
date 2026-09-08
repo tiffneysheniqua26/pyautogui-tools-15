@@ -1,35 +1,47 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
 # pyautogui-tools-15
 
-pyautogui-tools-15 is a Python autoclicker built on PyAutoGUI for automating repetitive mouse input. It provides precise timing controls and safety mechanisms for tasks that require consistent clicking over extended periods.
+`pyautogui-tools-15` is a high-performance Python utility library designed to streamline complex automation tasks through an intuitive abstraction of PyAutoGUI. It enables developers to build reliable, human-like autoclickers and interface interactors with minimal boilerplate code.
 
 ## Features
-- Configurable click intervals from 10ms to 30 seconds
-- Support for left, right, and middle mouse buttons
-- Keyboard hotkeys for starting, stopping, and emergency halt
-- Optional random timing variation to reduce detection in automated environments
+
+*   **Humanized Randomization:** Built-in jitter algorithms to randomize click coordinates and timing, significantly reducing the detection rate of automated scripts.
+*   **Interruptible Loop Engine:** Provides thread-safe start/stop controls for automation sequences, allowing for instant emergency halts via keyboard hotkeys.
+*   **Dynamic Target Acquisition:** Advanced image and color searching capabilities that adapt to resolution scaling and dynamic UI changes.
+*   **Session Profiling:** Save and load configuration profiles to quickly switch between different automation workflows without re-coding.
 
 ## Installation
 
+Ensure you have Python 3.8+ installed. Install the package directly via pip:
+
 ```bash
-git clone https://github.com/Developer/pyautogui-tools-15.git
-cd pyautogui-tools-15
-pip install -r requirements.txt
+pip install pyautogui-tools-15
+```
+
+For systems requiring cross-platform visual processing, ensure `opencv-python` is installed:
+
+```bash
+pip install opencv-python
 ```
 
 ## Basic Usage
 
+The library simplifies the creation of a standard interval clicker into a few lines of code:
+
 ```python
-from autoclicker import AutoClicker
+from pyautogui_tools_15 import Clicker
 
-clicker = AutoClicker(
-    interval=0.25,
-    button="left",
-    max_clicks=500
-)
+# Initialize with a 0.5-second interval and human-like jitter
+bot = Clicker(interval=0.5, jitter=True)
 
-clicker.start()  # Press F8 to stop
+# Start clicking at current mouse position
+bot.start()
+
+# Stop the automation
+bot.stop()
 ```
 
-The process runs at the current mouse position and can be interrupted instantly using the configured hotkey.
+## License
+
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
