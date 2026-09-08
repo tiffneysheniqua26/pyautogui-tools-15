@@ -1,46 +1,42 @@
-import functools
-import json
-import time
-from typing import Callable, Generator
+import logging
+import sys
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
+LOG_DIR = Path("logs")
+LOG_FILE = LOG_DIR / "pyautogui_tools.log"
 
-class AutoclickLogger:
+class ClickerFormatter(logging.Formatter):
+    """Custom formatting for clicker events."""
+    formats = {
+        logging.DEBUG: "[DEBUG] %(asctime)s - %(message)s",
+        logging.INFO: "[INFO] %(asctime)s - %(message)s",
+        logging.WARNING: "[WARN] %(asctime)s - %(message)s",
+        logging.ERROR: "[ERROR] %(asctime)s - %(message)s"
+    }
 
-    def __init__(self, filepath: str = "autoclick.log"):
-        self.filepath = filepath
-        open(self.filepath, "w").close()
+    def format(self, record):
+        log_fmt = self.formats.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
 
-    def log_action(self, action_name: str):
-        def decorator(func: Callable[..., Generator]):
-            @functools.wraps(func)
-            def wrapper(*args, **kwargs):
-                start = time.perf_counter()
-                gen = func(*args, **kwargs)
-                try:
-                    while True:
-                        coords = next(gen)
-                        duration = time.perf_counter() - start
-                        log_entry = {
-                            "action": action_name,
-                            "params": {
-                                "coords": coords,
-                                "elapsed": round(duration, 4),
-                            },
-                            "status": "success",
-                        }
-                        self._write(log_entry)
-                except StopIteration as e:
-                    return e.value
-                except Exception as e:
-                    self._write(
-                        {"action": action_name, "status": "error", "error": str(e)}
-                    )
-                    raise e
+def setup_logger(name: str = "clicker_app") -> logging.Logger:
+    """Init logger with file rotation mechanism."""
+    LOG_DIR.mkdir(exist_ok=True)
+    
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
 
-            return wrapper
+    if not logger.handlers:
+        handler = RotatingFileHandler(
+            LOG_FILE, maxBytes=1024*1024*5, backupCount=3
+        )
+        handler.setFormatter(ClickerFormatter())
+        
+        console = logging.StreamHandler(sys.stdout)
+        console.setFormatter(ClickerFormatter())
+        
+        logger.addHandler(handler)
+        logger.addHandler(console)
 
-        return decorator
-
-    def _write(self, data: dict):
-        with open(self.filepath, "a", encoding="utf-8") as f:
-            f.write(json.dumps(data) + "\n")
+    return logger
