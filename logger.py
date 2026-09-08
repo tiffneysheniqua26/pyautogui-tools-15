@@ -1,36 +1,46 @@
-import logging
-import os
-from logging.handlers import RotatingFileHandler
-from datetime import datetime
+import functools
+import json
+import time
+from typing import Callable, Generator
 
-class ClickerLogger:
-    def __init__(self, name='pyautogui-tools', log_dir='logs'):
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
 
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
+class AutoclickLogger:
 
-        fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    def __init__(self, filepath: str = "autoclick.log"):
+        self.filepath = filepath
+        open(self.filepath, "w").close()
 
-        # Rotating file handler: 5MB per file, keep 3 backups
-        file_path = os.path.join(log_dir, f'session_{datetime.now().strftime("%Y%m%d")}.log')
-        handler = RotatingFileHandler(
-            file_path, 
-            maxBytes=5*1024*1024, 
-            backupCount=3
-        )
-        handler.setFormatter(fmt)
+    def log_action(self, action_name: str):
+        def decorator(func: Callable[..., Generator]):
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                start = time.perf_counter()
+                gen = func(*args, **kwargs)
+                try:
+                    while True:
+                        coords = next(gen)
+                        duration = time.perf_counter() - start
+                        log_entry = {
+                            "action": action_name,
+                            "params": {
+                                "coords": coords,
+                                "elapsed": round(duration, 4),
+                            },
+                            "status": "success",
+                        }
+                        self._write(log_entry)
+                except StopIteration as e:
+                    return e.value
+                except Exception as e:
+                    self._write(
+                        {"action": action_name, "status": "error", "error": str(e)}
+                    )
+                    raise e
 
-        console = logging.StreamHandler()
-        console.setFormatter(fmt)
+            return wrapper
 
-        if not self.logger.handlers:
-            self.logger.addHandler(handler)
-            self.logger.addHandler(console)
+        return decorator
 
-    def get_logger(self):
-        return self.logger
-
-# Singleton-ish instance for easy import
-app_logger = ClickerLogger().get_logger()
+    def _write(self, data: dict):
+        with open(self.filepath, "a", encoding="utf-8") as f:
+            f.write(json.dumps(data) + "\n")
