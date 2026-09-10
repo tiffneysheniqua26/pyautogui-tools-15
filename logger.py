@@ -1,42 +1,38 @@
 import logging
-import sys
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
+import os
 
-LOG_DIR = Path("logs")
-LOG_FILE = LOG_DIR / "pyautogui_tools.log"
-
-class ClickerFormatter(logging.Formatter):
-    """Custom formatting for clicker events."""
-    formats = {
-        logging.DEBUG: "[DEBUG] %(asctime)s - %(message)s",
-        logging.INFO: "[INFO] %(asctime)s - %(message)s",
-        logging.WARNING: "[WARN] %(asctime)s - %(message)s",
-        logging.ERROR: "[ERROR] %(asctime)s - %(message)s"
-    }
-
-    def format(self, record):
-        log_fmt = self.formats.get(record.levelno)
-        formatter = logging.Formatter(log_fmt)
-        return formatter.format(record)
-
-def setup_logger(name: str = "clicker_app") -> logging.Logger:
-    """Init logger with file rotation mechanism."""
-    LOG_DIR.mkdir(exist_ok=True)
-    
+def get_autoclicker_logger(name='pyautogui-tools'):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
 
-    if not logger.handlers:
-        handler = RotatingFileHandler(
-            LOG_FILE, maxBytes=1024*1024*5, backupCount=3
-        )
-        handler.setFormatter(ClickerFormatter())
-        
-        console = logging.StreamHandler(sys.stdout)
-        console.setFormatter(ClickerFormatter())
-        
-        logger.addHandler(handler)
-        logger.addHandler(console)
+    log_dir = 'logs'
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir)
 
+    log_file = os.path.join(log_dir, f'{name}.log')
+    
+    # rotating handler: max 1MB per file, keep 3 backups
+    handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=1024 * 1024, 
+        backupCount=3
+    )
+    
+    formatter = logging.Formatter(
+        '%(asctime)s | %(levelname)-8s | %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+    
+    if not logger.handlers:
+        logger.addHandler(handler)
+        # extra console output for dev vibes
+        console = logging.StreamHandler()
+        console.setFormatter(formatter)
+        logger.addHandler(console)
+        
     return logger
+
+# Instantiate the singleton instance for quick import
+logger = get_autoclicker_logger()
