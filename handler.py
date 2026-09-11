@@ -1,35 +1,29 @@
-import pyautogui
+import sys
 import time
-import threading
-from typing import Callable, Optional
+import ctypes
 
-class ClickHandler:
-    def __init__(self, interval: float = 0.1):
-        self.interval = interval
-        self._running = False
-        self._thread: Optional[threading.Thread] = None
+class FastClickHandler:
+    def __init__(self, pause_duration=0.001):
+        self.pause = pause_duration
+        self._is_windows = sys.platform == "win32"
+        if self._is_windows:
+            self._user32 = ctypes.windll.user32
+            self._dw_down = 0x0002
+            self._dw_up = 0x0004
 
-    def _execute(self, action_func: Callable):
-        while self._running:
-            action_func()
-            time.sleep(self.interval)
+    def perform_click(self, x=None, y=None, clicks=1):
+        if self._is_windows and x is not None and y is not None:
+            self._user32.SetCursorPos(int(x), int(y))
+            for _ in range(clicks):
+                self._user32.mouse_event(self._dw_down, 0, 0, 0, 0)
+                self._user32.mouse_event(self._dw_up, 0, 0, 0, 0)
+                if self.pause > 0:
+                    time.sleep(self.pause)
+        else:
+            import pyautogui
+            pyautogui.PAUSE = self.pause
+            pyautogui.click(x=x, y=y, clicks=clicks)
 
-    def start(self, action_func: Callable):
-        if not self._running:
-            self._running = True
-            self._thread = threading.Thread(target=self._execute, args=(action_func,), daemon=True)
-            self._thread.start()
-
-    def stop(self):
-        self._running = False
-        if self._thread:
-            self._thread.join()
-            self._thread = None
-
-class SmartClick:
-    @staticmethod
-    def execute_click(button: str = 'left'):
-        pyautogui.click(button=button)
-
-def initialize_handler(interval: float = 0.05) -> ClickHandler:
-    return ClickHandler(interval=interval)
+    def batch_click(self, coordinates):
+        for x, y in coordinates:
+            self.perform_click(x, y)
