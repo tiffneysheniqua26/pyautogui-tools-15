@@ -1,28 +1,30 @@
-import random
+import pyautogui
 import time
-from typing import List, Tuple, Generator, Dict, Any
+import random
+from typing import Tuple
 
-class ClickSequenceProcessor:
-    """Processes click coordinate streams with randomized timing jitter."""
-    def __init__(self, base_delay: float = 0.1, jitter_factor: float = 0.05):
-        self.base_delay = base_delay
-        self.jitter_factor = jitter_factor
+def jitter_click(x: int, y: int, intensity: int = 5) -> None:
+    target = (x + random.randint(-intensity, intensity), y + random.randint(-intensity, intensity))
+    pyautogui.click(target)
 
-    def add_jitter(self, delay: float) -> float:
-        variation = random.uniform(-self.jitter_factor, self.jitter_factor)
-        return max(0.01, delay + variation)
+def smart_drag(start: Tuple[int, int], end: Tuple[int, int], duration: float = 0.5) -> None:
+    pyautogui.moveTo(*start)
+    pyautogui.dragTo(*end, duration=duration, button='left')
 
-    def process_targets(self, targets: List[Tuple[int, int]]) -> Generator[Dict[str, Any], None, None]:
-        for idx, (x, y) in enumerate(targets):
-            delay = self.add_jitter(self.base_delay)
-            yield {
-                "sequence_id": idx + 1,
-                "x": x,
-                "y": y,
-                "delay_after": round(delay, 4),
-                "timestamp": round(time.time(), 2)
-            }
+def safe_sequence(coords: list, interval: float = 0.2) -> None:
+    for x, y in coords:
+        pyautogui.click(x, y)
+        time.sleep(interval + random.uniform(0, 0.1))
 
-    def filter_out_of_bounds(self, targets: List[Tuple[int, int]], screen_size: Tuple[int, int]) -> List[Tuple[int, int]]:
-        max_x, max_y = screen_size
-        return [(x, y) for x, y in targets if 0 <= x <= max_x and 0 <= y <= max_y]
+def type_string_human(text: str, speed: float = 0.05) -> None:
+    for char in text:
+        pyautogui.typewrite(char)
+        time.sleep(speed + random.uniform(0, speed))
+
+def emergency_abort_check(hotkey: str = 'esc') -> bool:
+    if pyautogui.getActiveWindow() is not None:
+        return False
+    return True
+
+def randomized_wait(min_s: float, max_s: float) -> None:
+    time.sleep(random.uniform(min_s, max_s))
