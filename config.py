@@ -1,70 +1,57 @@
-import json
 import os
+import json
+from collections import ChainMap
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
-class AutoClickerConfig:
-    DEFAULTS: Dict[str, Any] = {
-        "click_interval": 0.1,
-        "button": "left",
-        "clicks_count": 0,
-        "hotkey_start": "f6",
-        "hotkey_stop": "f7",
-        "random_delay_range": [0.0, 0.05],
-        "double_click": False
-    }
+DEFAULT_CONFIG = {
+    "click_interval_ms": 100,
+    "mouse_button": "left",
+    "start_stop_hotkey": "f6",
+    "click_jitter_px": 0,
+    "max_clicks": 0,
+    "target_coordinate": None,
+}
 
-    def __init__(self, filepath: str = "config.json"):
-        self._filepath = Path(filepath)
-        self._data = self.DEFAULTS.copy()
-        self._load()
+class AutoclickerConfig:
+    def __init__(self, config_path: str = "config.json"):
+        self._path = Path(config_path)
+        self._file_config = self._load_from_file()
+        # Prioritize Environment variables, then local File Config, then system Defaults
+        self._store = ChainMap(os.environ, self._file_config, DEFAULT_CONFIG)
 
-    def _load(self) -> None:
-        if self._filepath.exists():
+    def _load_from_file(self) -> dict:
+        if self._path.exists():
             try:
-                with open(self._filepath, "r") as f:
-                    loaded_data = json.load(f)
-                    for key, default_val in self.DEFAULTS.items():
-                        if key in loaded_data:
-                            val = loaded_data[key]
-                            try:
-                                if isinstance(default_val, list) and isinstance(val, list):
-                                    self._data[key] = [type(default_val[0])(v) for v in val] if default_val else val
-                                else:
-                                    self._data[key] = type(default_val)(val)
-                            except (ValueError, TypeError):
-                                self._data[key] = default_val
-            except (json.JSONDecodeError, IOError):
-                self._save()
-        else:
-            self._save()
+                with open(self._path, "r") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+        return {}
 
-    def _save(self) -> None:
-        try:
-            with open(self._filepath, "w") as f:
-                json.dump(self._data, f, indent=4)
-        except IOError:
-            pass
+    def save(self) -> None:
+        with open(self._path, "w") as f:
+            json.dump(self._file_config, f, indent=4)
 
     def __getattr__(self, name: str) -> Any:
-        if name in self._data:
-            return self._data[name]
-        raise AttributeError(f"'AutoClickerConfig' has no attribute '{name}'")
+        if name in DEFAULT_CONFIG:
+            val = self._store[name]
+            default_val = DEFAULT_CONFIG[name]
+            if default_val is not None and val is not None:
+                try:
+                    return type(default_val)(val)
+                except (ValueError, TypeError):
+                    return default_val
+            return val
+        raise AttributeError(f"Configuration option '{name}' is not recognized.")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in ["_filepath", "_data"]:
+        if name in ["_path", "_file_config", "_store"]:
             super().__setattr__(name, value)
-            return
-        if name in self.DEFAULTS:
-            expected_type = type(self.DEFAULTS[name])
-            try:
-                self._data[name] = expected_type(value)
-                self._save()
-            except (ValueError, TypeError):
-                raise ValueError(f"Invalid type for {name}. Expected {expected_type.__name__}")
+        elif name in DEFAULT_CONFIG:
+            self._file_config[name] = value
+            self._store = ChainMap(os.environ, self._file_config, DEFAULT_CONFIG)
         else:
-            raise AttributeError(f"Cannot set undefined option: {name}")
+            raise AttributeError(f"Cannot set invalid configuration key: {name}")
 
-    def reset(self) -> None:
-        self._data = self.DEFAULTS.copy()
-        self._save()
+config = AutoclickerConfig()
