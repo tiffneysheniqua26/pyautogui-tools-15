@@ -1,38 +1,31 @@
-import logging
-from logging.handlers import RotatingFileHandler
-import os
+import json
+import datetime
+from pathlib import Path
+from typing import Any, Dict
 
-def get_autoclicker_logger(name='pyautogui-tools'):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+class ClickLogger:
+    def __init__(self, log_path: str = 'clicks.jsonl'):
+        self.log_path = Path(log_path)
 
-    log_dir = 'logs'
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+    def record(self, x: int, y: int, interval: float) -> None:
+        payload: Dict[str, Any] = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'coords': (x, y),
+            'interval': interval,
+            'session_id': hash(f'{x}{y}{interval}')
+        }
+        with open(self.log_path, 'a') as f:
+            f.write(json.dumps(payload) + '\n')
 
-    log_file = os.path.join(log_dir, f'{name}.log')
-    
-    # rotating handler: max 1MB per file, keep 3 backups
-    handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=1024 * 1024, 
-        backupCount=3
-    )
-    
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    handler.setFormatter(formatter)
-    
-    if not logger.handlers:
-        logger.addHandler(handler)
-        # extra console output for dev vibes
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        logger.addHandler(console)
-        
-    return logger
+    def replay_history(self) -> list:
+        if not self.log_path.exists():
+            return []
+        with open(self.log_path, 'r') as f:
+            return [json.loads(line) for line in f]
 
-# Instantiate the singleton instance for quick import
-logger = get_autoclicker_logger()
+    def clear_history(self) -> None:
+        if self.log_path.exists():
+            self.log_path.unlink()
+
+def get_logger(name: str = 'default') -> ClickLogger:
+    return ClickLogger(f'{name}_clicks.jsonl')
