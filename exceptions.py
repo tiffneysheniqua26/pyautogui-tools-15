@@ -1,34 +1,40 @@
-import pyautogui
+import time
+import functools
 
-class AutoClickerError(Exception):
-    """Base exception for the toolkit"""
+class PerformanceThresholdExceeded(Exception):
+    """Raised when the click frequency exceeds system capacity."""
     pass
 
-class SafetyTriggerViolation(AutoClickerError):
-    """Raised when mouse exits the screen bounds"""
-    pass
+def throttled_execution(limit_hz: float):
+    """Dynamic delay injection using closure-based time tracking."""
+    interval = 1.0 / limit_hz
+    last_called = [0.0]
 
-class CoordinateOutOfBounds(AutoClickerError):
-    """Raised when target coordinates are invalid"""
-    pass
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            elapsed = time.perf_counter() - last_called[0]
+            if elapsed < interval:
+                time.sleep(interval - elapsed)
+            result = func(*args, **kwargs)
+            last_called[0] = time.perf_counter()
+            return result
+        return wrapper
+    return decorator
 
-def validate_position(x, y):
-    width, height = pyautogui.size()
-    if not (0 <= x <= width and 0 <= y <= height):
-        raise CoordinateOutOfBounds(f"coords ({x}, {y}) exceed resolution {width}x{height}")
+class ExecutionMonitor:
+    """
+    Context manager for micro-benchmarking click operations.
+    Usage: with ExecutionMonitor(): perform_click()
+    """
+    def __init__(self, threshold=0.01):
+        self.threshold = threshold
 
-def check_safety_perimeter():
-    x, y = pyautogui.position()
-    if x <= 0 or y <= 0:
-        raise SafetyTriggerViolation("emergency abort triggered by screen edge")
+    def __enter__(self):
+        self.start = time.perf_counter()
+        return self
 
-class FaultTolerance:
-    @staticmethod
-    def execute_with_guard(func, *args, **kwargs):
-        try:
-            check_safety_perimeter()
-            return func(*args, **kwargs)
-        except pyautogui.FailSafeException as e:
-            raise SafetyTriggerViolation("pyautogui failsafe tripped") from e
-        except Exception as e:
-            raise AutoClickerError(f"unexpected operation failure: {e}") from e
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        duration = time.perf_counter() - self.start
+        if duration > self.threshold:
+            raise PerformanceThresholdExceeded(f"Click latency: {duration:.4f}s")
