@@ -1,33 +1,36 @@
-import json
-import os
-from typing import Dict, Any
+import time
+import ctypes
+from typing import Callable, Optional
 
-class ClickDataHandler:
-    def __init__(self, storage_path: str = "settings.json"):
-        self.path = storage_path
-        self._validate_store()
+class FastClicker:
+    """High-performance click engine utilizing native OS calls."""
+    def __init__(self, delay: float = 0.001) -> None:
+        self.delay = delay
+        self._is_running = False
+        self._user32 = getattr(ctypes, 'windll', None).user32 if hasattr(ctypes, 'windll') else None
 
-    def _validate_store(self) -> None:
-        if not os.path.exists(self.path):
-            with open(self.path, 'w') as f:
-                json.dump({"interval": 0.1, "button": "left", "clicks": 0}, f)
+    def _native_click(self) -> None:
+        if self._user32:
+            self._user32.mouse_event(2, 0, 0, 0, 0)
+            self._user32.mouse_event(4, 0, 0, 0, 0)
 
-    def persist_state(self, key: str, value: Any) -> None:
-        data = self.load_state()
-        data[key] = value
-        with open(self.path, 'w') as f:
-            json.dump(data, f, indent=4)
+    def run_burst(self, count: int, callback: Optional[Callable[[int], None]] = None) -> int:
+        self._is_running = True
+        performed = 0
+        target_time = time.perf_counter()
+        
+        while self._is_running and performed < count:
+            self._native_click()
+            performed += 1
+            if callback:
+                callback(performed)
+            
+            target_time += self.delay
+            sleep_duration = target_time - time.perf_counter()
+            if sleep_duration > 0:
+                time.sleep(sleep_duration)
+                
+        return performed
 
-    def load_state(self) -> Dict[str, Any]:
-        try:
-            with open(self.path, 'r') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
-            return {}
-
-    def __repr__(self):
-        return f"<ClickDataHandler(path='{self.path}')>"
-
-def get_instance() -> ClickDataHandler:
-    """Factory for persistent state management"""
-    return ClickDataHandler()
+    def stop(self) -> None:
+        self._is_running = False
