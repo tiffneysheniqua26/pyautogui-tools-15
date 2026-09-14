@@ -1,32 +1,34 @@
-import json
-import os
-from typing import Dict, Any
+import pyautogui
+import time
+import random
+from typing import Tuple
 
-def serialize_macro(coords: list, interval: float, iterations: int) -> str:
-    """Transforms raw click stream into compact json strings"""
-    payload = {
-        "nodes": [{"x": c[0], "y": c[1]} for c in coords],
-        "timing": {"delay": interval, "repeats": iterations},
-        "version": "1.0.0"
-    }
-    return json.dumps(payload, separators=(',', ':'))
+def get_jitter_coords(x: int, y: int, intensity: int = 2) -> Tuple[int, int]:
+    """Calculates coordinates with human-like jitter"""
+    return (
+        x + random.randint(-intensity, intensity),
+        y + random.randint(-intensity, intensity)
+    )
 
-def load_macro(filepath: str) -> Dict[str, Any]:
-    """Deserializes macro config from disk with integrity check"""
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"Macro definition missing: {filepath}")
-    
-    with open(filepath, 'r') as f:
-        data = json.load(f)
-        
-    # Validate structure implicitly via access
-    required = {'nodes', 'timing'}
-    if not required.issubset(data.keys()):
-        raise ValueError("Malformed macro definition file")
-        
-    return data
+def safe_click(x: int, y: int, duration: float = 0.1) -> None:
+    """Performs a click with built-in fail-safe delay"""
+    pos = get_jitter_coords(x, y)
+    pyautogui.moveTo(*pos, duration=duration)
+    pyautogui.click()
 
-def generate_metadata(macro_name: str) -> str:
-    """Creation of unique identification for macro profiles"""
-    import hashlib
-    return hashlib.sha256(macro_name.encode()).hexdigest()[:12]
+def batch_click(targets: list, interval: float = 0.5) -> None:
+    """Iterates through screen targets with pauses"""
+    for target in targets:
+        safe_click(*target)
+        time.sleep(interval + random.uniform(0, 0.2))
+
+def drag_to_relative(dx: int, dy: int) -> None:
+    """Relative mouse dragging for UI interactions"""
+    curr_x, curr_y = pyautogui.position()
+    pyautogui.dragTo(curr_x + dx, curr_y + dy, duration=0.3, tween=pyautogui.easeInOutQuad)
+
+def pulse_click(x: int, y: int, count: int = 3) -> None:
+    """Multi-tap execution for unresponsive elements"""
+    for _ in range(count):
+        pyautogui.click(x, y)
+        time.sleep(0.05)
