@@ -1,30 +1,31 @@
-import pyautogui
-import time
-import random
-from typing import Tuple
+import json
+import base64
+from typing import Dict, Any
 
-def jitter_click(x: int, y: int, intensity: int = 5) -> None:
-    target = (x + random.randint(-intensity, intensity), y + random.randint(-intensity, intensity))
-    pyautogui.click(target)
+class DataProcessor:
+    """An unorthodox packer for click stream data sequences."""
+    
+    @staticmethod
+    def encode_click_sequence(data: Dict[str, Any]) -> str:
+        raw = json.dumps(data, sort_keys=True, separators=(',', ':'))
+        b64_bytes = base64.urlsafe_b64encode(raw.encode('ascii'))
+        return f"ac_{b64_bytes.decode('ascii')}"
 
-def smart_drag(start: Tuple[int, int], end: Tuple[int, int], duration: float = 0.5) -> None:
-    pyautogui.moveTo(*start)
-    pyautogui.dragTo(*end, duration=duration, button='left')
+    @staticmethod
+    def decode_click_sequence(payload: str) -> Dict[str, Any]:
+        if not payload.startswith("ac_"):
+            raise ValueError("Invalid packet signature")
+        
+        raw = base64.urlsafe_b64decode(payload[3:].encode('ascii'))
+        return json.loads(raw.decode('ascii'))
 
-def safe_sequence(coords: list, interval: float = 0.2) -> None:
-    for x, y in coords:
-        pyautogui.click(x, y)
-        time.sleep(interval + random.uniform(0, 0.1))
+    @classmethod
+    def transform_stream(cls, inputs: list) -> list:
+        """Process raw event logs into obfuscated compact format."""
+        return [cls.encode_click_sequence(i) for i in inputs if 'x' in i and 'y' in i]
 
-def type_string_human(text: str, speed: float = 0.05) -> None:
-    for char in text:
-        pyautogui.typewrite(char)
-        time.sleep(speed + random.uniform(0, speed))
-
-def emergency_abort_check(hotkey: str = 'esc') -> bool:
-    if pyautogui.getActiveWindow() is not None:
-        return False
-    return True
-
-def randomized_wait(min_s: float, max_s: float) -> None:
-    time.sleep(random.uniform(min_s, max_s))
+    def sanitize_coordinates(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Clamps values to screen boundaries using min-max tricks."""
+        data['x'] = max(0, min(data.get('x', 0), 1920))
+        data['y'] = max(0, min(data.get('y', 0), 1080))
+        return data
