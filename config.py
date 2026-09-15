@@ -1,57 +1,32 @@
 import os
-import json
-from collections import ChainMap
-from pathlib import Path
-from typing import Any
+from dataclasses import dataclass
 
-DEFAULT_CONFIG = {
-    "click_interval_ms": 100,
-    "mouse_button": "left",
-    "start_stop_hotkey": "f6",
-    "click_jitter_px": 0,
-    "max_clicks": 0,
-    "target_coordinate": None,
-}
+@dataclass(frozen=True)
+class AppConfig:
+    APP_NAME: str = 'pyautogui-tools-15'
+    CLICK_INTERVAL: float = 0.1
+    DEFAULT_KEY: str = 'f9'
+    LOG_FILE: str = 'automation.log'
 
-class AutoclickerConfig:
-    def __init__(self, config_path: str = "config.json"):
-        self._path = Path(config_path)
-        self._file_config = self._load_from_file()
-        # Prioritize Environment variables, then local File Config, then system Defaults
-        self._store = ChainMap(os.environ, self._file_config, DEFAULT_CONFIG)
+class ConfigRegistry:
+    def __init__(self):
+        self._store = {k: v for k, v in AppConfig.__dict__.items() if not k.startswith('__')}
 
-    def _load_from_file(self) -> dict:
-        if self._path.exists():
-            try:
-                with open(self._path, "r") as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
-        return {}
+    def get(self, key: str, fallback=None):
+        return self._store.get(key, fallback)
 
-    def save(self) -> None:
-        with open(self._path, "w") as f:
-            json.dump(self._file_config, f, indent=4)
+    def update_from_env(self):
+        for key in self._store:
+            env_val = os.getenv(f'AUTO_{key}')
+            if env_val:
+                self._store[key] = type(self._store[key])(env_val)
 
-    def __getattr__(self, name: str) -> Any:
-        if name in DEFAULT_CONFIG:
-            val = self._store[name]
-            default_val = DEFAULT_CONFIG[name]
-            if default_val is not None and val is not None:
-                try:
-                    return type(default_val)(val)
-                except (ValueError, TypeError):
-                    return default_val
-            return val
-        raise AttributeError(f"Configuration option '{name}' is not recognized.")
+    @property
+    def settings(self):
+        return self._store
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name in ["_path", "_file_config", "_store"]:
-            super().__setattr__(name, value)
-        elif name in DEFAULT_CONFIG:
-            self._file_config[name] = value
-            self._store = ChainMap(os.environ, self._file_config, DEFAULT_CONFIG)
-        else:
-            raise AttributeError(f"Cannot set invalid configuration key: {name}")
+settings = ConfigRegistry()
+settings.update_from_env()
 
-config = AutoclickerConfig()
+def get_setting(key: str):
+    return settings.get(key)
