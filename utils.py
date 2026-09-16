@@ -1,34 +1,53 @@
-import pyautogui
 import time
-from typing import Tuple, Optional
+from collections import deque
+import pyautogui
 
-def get_mouse_coordinates() -> Tuple[int, int]:
-    """Fetches the current X and Y coordinates of the cursor.
-    Returns a tuple containing current screen positions."""
-    return pyautogui.position()
+class FailSafeTriggered(Exception):
+    """Raised when safety monitor detects anomalous or dangerous clicking behavior."""
+    pass
 
-def execute_click(x: Optional[int] = None, y: Optional[int] = None, interval: float = 0.1) -> None:
-    """Perform a click at specified coordinates.
-    If coordinates are omitted, performs click at current position.
-    Utilizes internal pyautogui click handler with a safe buffer."""
-    pyautogui.click(x=x, y=y)
-    time.sleep(interval)
+class SafetyMonitor:
+    def __init__(self, max_clicks_per_second: int = 25, history_size: int = 15):
+        self.max_rate = max_clicks_per_second
+        self.history = deque(maxlen=history_size)
+        try:
+            self.screen_width, self.screen_height = pyautogui.size()
+        except Exception:
+            self.screen_width, self.screen_height = 1920, 1080
 
-def screen_safety_check(x: int, y: int) -> bool:
-    """Validates coordinates against current screen resolution boundaries.
-    Ensures the autoclicker doesn't attempt out-of-bounds maneuvers."""
-    width, height = pyautogui.size()
-    return 0 <= x < width and 0 <= y < height
+    def validate_coordinate(self, x: int, y: int) -> tuple[int, int]:
+        """Clamps coordinates to screen boundaries and checks safety corners."""
+        corners = [
+            (0, 0),
+            (0, self.screen_height - 1),
+            (self.screen_width - 1, 0),
+            (self.screen_width - 1, self.screen_height - 1)
+        ]
+        
+        # Custom deadzone threshold check for rapid escapes
+        if any(abs(x - cx) < 5 and abs(y - cy) < 5 for cx, cy in corners):
+            raise FailSafeTriggered(f"Cursor entered safety corner zone ({x}, {y}). Aborting process.")
 
-def panic_mode_trigger() -> None:
-    """Hard-resets pyautogui failsafe protocols.
-    Aborts active execution cycles by dumping the failsafe exception."""
-    pyautogui.FAILSAFE = True
-    pyautogui.FAILSAFE_POINTS = [(0, 0)]
+        clamped_x = max(0, min(int(x), self.screen_width - 1))
+        clamped_y = max(0, min(int(y), self.screen_height - 1))
+        return clamped_x, clamped_y
 
-def rapid_click_sequence(iterations: int, delay: float = 0.05) -> None:
-    """Execution engine for high-frequency click simulation.
-    Maintains constant pressure on target indices via procedural loops."""
-    for _ in range(iterations):
-        pyautogui.click()
-        time.sleep(delay)
+    def register_click_and_verify(self, x: int, y: int) -> bool:
+        """Tracks click timing and spatial distribution to intercept UI lockups."""
+        now = time.time()
+        cx, cy = self.validate_coordinate(x, y)
+        self.history.append((now, (cx, cy)))
+
+        if len(self.history) < self.history.maxlen:
+            return True
+
+        elapsed = now - self.history[0][0]
+        if elapsed > 0:
+            rate = len(self.history) / elapsed
+            if rate > self.max_rate:
+                unique_positions = {pos for _, pos in self.history}
+                if len(unique_positions) <= 2:
+                    raise FailSafeTriggered(
+                        f"Hyper-velocity localized click loop detected: {rate:.1f} Hz at {unique_positions}"
+                    )
+        return True
