@@ -1,40 +1,39 @@
 import time
 import functools
 
-class PerformanceThresholdExceeded(Exception):
-    """Raised when the click frequency exceeds system capacity."""
+class PerformanceBottleneckError(Exception):
+    """Raised when the click stream exceeds system latency tolerance."""
     pass
 
-def throttled_execution(limit_hz: float):
-    """Dynamic delay injection using closure-based time tracking."""
-    interval = 1.0 / limit_hz
-    last_called = [0.0]
+class ExecutionThresholdExceeded(PerformanceBottleneckError):
+    """Custom error for micro-benchmark violations in core clicks."""
+    pass
 
+def time_execution(threshold: float):
+    """Decorator for monitoring core processing latency."""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            elapsed = time.perf_counter() - last_called[0]
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
+            start = time.perf_counter()
             result = func(*args, **kwargs)
-            last_called[0] = time.perf_counter()
+            duration = time.perf_counter() - start
+            if duration > threshold:
+                raise ExecutionThresholdExceeded(f"{func.__name__} took {duration:.6f}s")
             return result
         return wrapper
     return decorator
 
-class ExecutionMonitor:
-    """
-    Context manager for micro-benchmarking click operations.
-    Usage: with ExecutionMonitor(): perform_click()
-    """
-    def __init__(self, threshold=0.01):
-        self.threshold = threshold
+class ThrottleController:
+    """Reactive limiter for event queue backpressure management."""
+    def __init__(self, limit: int = 100):
+        self.limit = limit
+        self.counter = 0
 
     def __enter__(self):
-        self.start = time.perf_counter()
+        self.counter += 1
+        if self.counter > self.limit:
+            raise PerformanceBottleneckError("Queue overflow imminent")
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        duration = time.perf_counter() - self.start
-        if duration > self.threshold:
-            raise PerformanceThresholdExceeded(f"Click latency: {duration:.4f}s")
+        self.counter -= 1
