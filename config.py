@@ -1,32 +1,37 @@
+import json
 import os
-from dataclasses import dataclass
+from typing import Any, Dict
 
-@dataclass(frozen=True)
-class AppConfig:
-    APP_NAME: str = 'pyautogui-tools-15'
-    CLICK_INTERVAL: float = 0.1
-    DEFAULT_KEY: str = 'f9'
-    LOG_FILE: str = 'automation.log'
+DEFAULT_CONFIG = {
+    "click_interval": 0.1,
+    "button": "left",
+    "failsafe": True,
+    "log_level": "INFO",
+    "max_clicks": 1000
+}
 
-class ConfigRegistry:
-    def __init__(self):
-        self._store = {k: v for k, v in AppConfig.__dict__.items() if not k.startswith('__')}
+class ConfigLoader:
+    def __init__(self, filepath: str = "config.json"):
+        self.filepath = filepath
 
-    def get(self, key: str, fallback=None):
-        return self._store.get(key, fallback)
+    def load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.filepath):
+            self._save(DEFAULT_CONFIG)
+            return DEFAULT_CONFIG
+        try:
+            with open(self.filepath, "r") as f:
+                data = json.load(f)
+                return {**DEFAULT_CONFIG, **data}
+        except (json.JSONDecodeError, IOError):
+            return DEFAULT_CONFIG
 
-    def update_from_env(self):
-        for key in self._store:
-            env_val = os.getenv(f'AUTO_{key}')
-            if env_val:
-                self._store[key] = type(self._store[key])(env_val)
+    def _save(self, data: Dict[str, Any]) -> None:
+        try:
+            with open(self.filepath, "w") as f:
+                json.dump(data, f, indent=4)
+        except IOError as e:
+            print(f"Config save failure: {e}")
 
-    @property
-    def settings(self):
-        return self._store
-
-settings = ConfigRegistry()
-settings.update_from_env()
-
-def get_setting(key: str):
-    return settings.get(key)
+def get_app_config() -> Dict[str, Any]:
+    loader = ConfigLoader()
+    return loader.load()
