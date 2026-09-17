@@ -1,66 +1,38 @@
-import sys
-import time
-from typing import Callable, Any, Tuple, Optional, Dict
 import pyautogui
+import time
+import logging
 
+class ClickHandler:
+    def __init__(self, interval: float = 0.1):
+        self.interval = interval
+        self.running = False
+        logging.basicConfig(level=logging.INFO)
+        self.logger = logging.getLogger('pyautogui-tools-15')
 
-class ScreenBoundaryError(Exception):
-    """Raised when target coordinates fall outside detectable display bounds."""
-    pass
+    def toggle_state(self):
+        self.running = not self.running
+        self.logger.info(f'State transitioned to: {self.running}')
 
-
-class AutoclickFailSafeTriggered(Exception):
-    """Raised when pyautogui failsafe is tripped by user intervention."""
-    pass
-
-
-class ResilientActionHandler:
-    """Creative dynamic wrapper catching PyAutoGUI edge cases during automation."""
-
-    def __init__(self, fallback_corner: Tuple[int, int] = (10, 10)):
-        self.fallback_corner = fallback_corner
-        self.error_counts: Dict[str, int] = {}
-        pyautogui.FAILSAFE = True
-
-    def clamp_coordinates(self, x: int, y: int) -> Tuple[int, int]:
-        """Ensures click coordinates do not trigger off-screen panic edge cases."""
-        width, height = pyautogui.size()
-        safe_x = max(0, min(x, width - 1))
-        safe_y = max(0, min(y, height - 1))
-        return safe_x, safe_y
-
-    def execute_safely(self, action_func: Callable[..., Any], *args, **kwargs) -> Optional[Any]:
-        """Executes a GUI action with layered recovery for unexpected screen states."""
-        action_name = getattr(action_func, '__name__', 'unnamed_action')
-        self.error_counts.setdefault(action_name, 0)
-
+    def execute_click_loop(self, duration: int):
+        end_time = time.time() + duration
+        self.logger.info('Starting click orchestration')
         try:
-            if len(args) >= 2 and isinstance(args[0], int) and isinstance(args[1], int):
-                safe_coords = self.clamp_coordinates(args[0], args[1])
-                args = safe_coords + args[2:]
-            elif 'x' in kwargs and 'y' in kwargs:
-                kwargs['x'], kwargs['y'] = self.clamp_coordinates(kwargs['x'], kwargs['y'])
-
-            return action_func(*args, **kwargs)
-
+            while self.running and time.time() < end_time:
+                pyautogui.click()
+                time.sleep(self.interval)
         except pyautogui.FailSafeException:
-            self.error_counts[action_name] += 1
-            time.sleep(0.5)
-            pyautogui.moveTo(*self.fallback_corner, duration=0.1)
-            raise AutoclickFailSafeTriggered("User panic trigger detected via failsafe corner.")
+            self.logger.warning('Fail-safe triggered, halting operations')
+            self.running = False
 
-        except (pyautogui.ImageNotFoundException, OSError) as err:
-            self.error_counts[action_name] += 1
-            sys.stderr.write(f"Recovering from display interaction error in {action_name}: {err}\n")
-            return None
+    @staticmethod
+    def validate_screen_coordinates(x: int, y: int) -> bool:
+        screen_w, screen_h = pyautogui.size()
+        return 0 <= x <= screen_w and 0 <= y <= screen_h
 
-        except Exception as unhandled:
-            self.error_counts[action_name] += 1
-            sys.stderr.write(f"Unhandled edge case in {action_name}: {type(unhandled).__name__}\n")
-            return None
-
-    def wrap_action(self, func: Callable[..., Any]) -> Callable[..., Any]:
-        """Decorator to automatically wrap autoclicker operations with safety handlers."""
-        def wrapper(*args, **kwargs):
-            return self.execute_safely(func, *args, **kwargs)
-        return wrapper
+    def execute_targeted_sequence(self, x: int, y: int, count: int):
+        if not self.validate_screen_coordinates(x, y):
+            raise ValueError('Coordinate mapping error')
+        
+        for _ in range(count):
+            pyautogui.click(x=x, y=y)
+            time.sleep(self.interval)
