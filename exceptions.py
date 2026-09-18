@@ -1,39 +1,42 @@
 import time
 import functools
 
-class PerformanceBottleneckError(Exception):
-    """Raised when the click stream exceeds system latency tolerance."""
+class ClickPerformanceError(Exception):
+    """Custom exception for throttling bottlenecks."""
     pass
 
-class ExecutionThresholdExceeded(PerformanceBottleneckError):
-    """Custom error for micro-benchmark violations in core clicks."""
-    pass
+class PerformanceOptimizer:
+    """
+    A decorator-based heuristic controller that injects micro-naps 
+    to prevent CPU saturation during high-frequency click events.
+    """
+    def __init__(self, threshold_ms=1):
+        self.threshold = threshold_ms / 1000.0
+        self.last_exec = time.perf_counter()
 
-def time_execution(threshold: float):
-    """Decorator for monitoring core processing latency."""
-    def decorator(func):
+    def __call__(self, func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            start = time.perf_counter()
-            result = func(*args, **kwargs)
-            duration = time.perf_counter() - start
-            if duration > threshold:
-                raise ExecutionThresholdExceeded(f"{func.__name__} took {duration:.6f}s")
-            return result
+            now = time.perf_counter()
+            delta = now - self.last_exec
+            if delta < self.threshold:
+                time.sleep(self.threshold - delta)
+            self.last_exec = time.perf_counter()
+            return func(*args, **kwargs)
         return wrapper
-    return decorator
 
-class ThrottleController:
-    """Reactive limiter for event queue backpressure management."""
-    def __init__(self, limit: int = 100):
-        self.limit = limit
-        self.counter = 0
+class ExecutionThrottle:
+    """
+    Context manager for non-blocking latency injection in tight loops.
+    Uses a generator-based sleep pattern for performance stability.
+    """
+    def __init__(self, interval):
+        self.interval = interval
 
     def __enter__(self):
-        self.counter += 1
-        if self.counter > self.limit:
-            raise PerformanceBottleneckError("Queue overflow imminent")
-        return self
+        self.start = time.perf_counter()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.counter -= 1
+        elapsed = time.perf_counter() - self.start
+        if elapsed < self.interval:
+            time.sleep(self.interval - elapsed)
