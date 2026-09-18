@@ -1,34 +1,40 @@
-import pyautogui
-import time
 import random
-from typing import Tuple
+import time
+from contextlib import contextmanager
+import pyautogui
 
-def get_jitter_coords(x: int, y: int, intensity: int = 2) -> Tuple[int, int]:
-    """Calculates coordinates with human-like jitter"""
-    return (
-        x + random.randint(-intensity, intensity),
-        y + random.randint(-intensity, intensity)
-    )
+def jitter_coordinate(coord: tuple, offset: int = 3) -> tuple:
+    """Applies a random normal-like distribution offset to a coordinate."""
+    x, y = coord
+    dx = int(random.gauss(0, offset / 2))
+    dy = int(random.gauss(0, offset / 2))
+    return (x + dx, y + dy)
 
-def safe_click(x: int, y: int, duration: float = 0.1) -> None:
-    """Performs a click with built-in fail-safe delay"""
-    pos = get_jitter_coords(x, y)
-    pyautogui.moveTo(*pos, duration=duration)
-    pyautogui.click()
+def human_delay_generator(base_delay: float, variance: float = 0.15):
+    """Generates variable delay intervals to simulate human click pauses."""
+    while True:
+        actual_delay = max(0.01, random.normalvariate(base_delay, variance))
+        yield actual_delay
 
-def batch_click(targets: list, interval: float = 0.5) -> None:
-    """Iterates through screen targets with pauses"""
-    for target in targets:
-        safe_click(*target)
-        time.sleep(interval + random.uniform(0, 0.2))
+@contextmanager
+def temporary_settings(pause: float = None, failsafe: bool = None):
+    """Context manager to temporarily modify PyAutoGUI global safety configurations."""
+    original_pause = pyautogui.PAUSE
+    original_failsafe = pyautogui.FAILSAFE
+    try:
+        if pause is not None:
+            pyautogui.PAUSE = pause
+        if failsafe is not None:
+            pyautogui.FAILSAFE = failsafe
+        yield
+    finally:
+        pyautogui.PAUSE = original_pause
+        pyautogui.FAILSAFE = original_failsafe
 
-def drag_to_relative(dx: int, dy: int) -> None:
-    """Relative mouse dragging for UI interactions"""
-    curr_x, curr_y = pyautogui.position()
-    pyautogui.dragTo(curr_x + dx, curr_y + dy, duration=0.3, tween=pyautogui.easeInOutQuad)
-
-def pulse_click(x: int, y: int, count: int = 3) -> None:
-    """Multi-tap execution for unresponsive elements"""
-    for _ in range(count):
-        pyautogui.click(x, y)
-        time.sleep(0.05)
+def click_sequence_generator(coords: list, loop: bool = False):
+    """Yields target coordinates sequentially, optionally looping infinitely."""
+    while True:
+        for coord in coords:
+            yield coord
+        if not loop:
+            break
