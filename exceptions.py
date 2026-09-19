@@ -1,42 +1,30 @@
-import time
-import functools
+from typing import Optional, Any
 
-class ClickPerformanceError(Exception):
-    """Custom exception for throttling bottlenecks."""
+class PyAutoGUIError(Exception):
+    """Base exception for the pyautogui-tools-15 suite."""
     pass
 
-class PerformanceOptimizer:
-    """
-    A decorator-based heuristic controller that injects micro-naps 
-    to prevent CPU saturation during high-frequency click events.
-    """
-    def __init__(self, threshold_ms=1):
-        self.threshold = threshold_ms / 1000.0
-        self.last_exec = time.perf_counter()
+class ClickerRuntimeError(PyAutoGUIError):
+    """Raised when the autoclicker loop enters a forbidden state."""
+    def __init__(self, message: str, context: Optional[dict[str, Any]] = None) -> None:
+        self.context = context or {}
+        super().__init__(f"{message} | Context: {self.context}")
 
-    def __call__(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            now = time.perf_counter()
-            delta = now - self.last_exec
-            if delta < self.threshold:
-                time.sleep(self.threshold - delta)
-            self.last_exec = time.perf_counter()
-            return func(*args, **kwargs)
-        return wrapper
+class SafetyTriggerViolation(PyAutoGUIError):
+    """Raised when mouse position forces an emergency halt."""
+    def __init__(self, x: int, y: int) -> None:
+        self.x = x
+        self.y = y
+        super().__init__(f"Emergency halt triggered at coordinate ({x}, {y})")
 
-class ExecutionThrottle:
-    """
-    Context manager for non-blocking latency injection in tight loops.
-    Uses a generator-based sleep pattern for performance stability.
-    """
-    def __init__(self, interval):
-        self.interval = interval
+class ConfigurationIntegrityError(PyAutoGUIError):
+    """Raised when application settings are corrupted or invalid."""
+    def __init__(self, field: str, value: Any) -> None:
+        self.field = field
+        self.value = value
+        super().__init__(f"Invalid configuration detected: {field}={value}")
 
-    def __enter__(self):
-        self.start = time.perf_counter()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        elapsed = time.perf_counter() - self.start
-        if elapsed < self.interval:
-            time.sleep(self.interval - elapsed)
+def raise_if_unsafe(x: int, y: int, boundary: int = 0) -> None:
+    """Validates safety bounds for clicker operations."""
+    if x <= boundary or y <= boundary:
+        raise SafetyTriggerViolation(x, y)
