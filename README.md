@@ -1,47 +1,31 @@
 # pyautogui-tools-15
 
-`pyautogui-tools-15` is a high-performance Python utility library designed to streamline complex automation tasks through an intuitive abstraction of PyAutoGUI. It enables developers to build reliable, human-like autoclickers and interface interactors with minimal boilerplate code.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+`pyautogui-tools-15` is a robust Python utility designed to automate repetitive mouse clicks and keystrokes with high precision. It provides a lightweight wrapper around PyAutoGUI to easily schedule clicking patterns, detect screen elements, and run background automation scripts.
 
 ## Features
 
-*   **Humanized Randomization:** Built-in jitter algorithms to randomize click coordinates and timing, significantly reducing the detection rate of automated scripts.
-*   **Interruptible Loop Engine:** Provides thread-safe start/stop controls for automation sequences, allowing for instant emergency halts via keyboard hotkeys.
-*   **Dynamic Target Acquisition:** Advanced image and color searching capabilities that adapt to resolution scaling and dynamic UI changes.
-*   **Session Profiling:** Save and load configuration profiles to quickly switch between different automation workflows without re-coding.
+*   **Dynamic Interval Clicker:** Set exact millisecond intervals with random human-like jitter to bypass basic anti-cheat and bot-detection filters.
+*   **Targeted Pixel Locking:** Automatically pause or halt clicking tasks if specified screen coordinates change color or if an anchor image is lost.
+*   **Emergency Failsafe:** Integrated safety listeners that instantly abort execution when the mouse is dragged to any screen corner.
 
 ## Installation
 
-Ensure you have Python 3.8+ installed. Install the package directly via pip:
+Clone the repository and install the dependencies directly:
 
 ```bash
-pip install pyautogui-tools-15
+git clone https://github.com/developer/pyautogui-tools-15.git
+cd pyautogui-tools-15
+pip install -r requirements.txt
 ```
 
-For systems requiring cross-platform visual processing, ensure `opencv-python` is installed:
+## Quick Start
 
-```bash
-pip install opencv-python
-```
-
-## Basic Usage
-
-The library simplifies the creation of a standard interval clicker into a few lines of code:
+Create automated click intervals with human-like variance in just a few lines of code:
 
 ```python
-from pyautogui_tools_15 import Clicker
+from pyautogui_tools import MultiClicker
 
-# Initialize with a 0.5-second interval and human-like jitter
-bot = Clicker(interval=0.5, jitter=True)
-
-# Start clicking at current mouse position
-bot.start()
-
-# Stop the automation
-bot.stop()
-```
-
-## License
-
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+# Initialize clicker at specific screen coordinates
+clicker = MultiClicker(target_x=500, target_y=
