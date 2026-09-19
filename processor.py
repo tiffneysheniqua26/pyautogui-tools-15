@@ -1,31 +1,30 @@
-import json
-import base64
-from typing import Dict, Any
+import pyautogui
+import time
+from typing import Tuple
 
-class DataProcessor:
-    """An unorthodox packer for click stream data sequences."""
+def validate_coordinates(x: int, y: int) -> Tuple[int, int]:
+    screen_width, screen_height = pyautogui.size()
+    safe_x = max(0, min(x, screen_width - 1))
+    safe_y = max(0, min(y, screen_height - 1))
+    return int(safe_x), int(safe_y)
+
+def run_clicker_loop(coords: list, interval: float):
+    if not isinstance(interval, (int, float)) or interval < 0.01:
+        interval = 0.1
     
-    @staticmethod
-    def encode_click_sequence(data: Dict[str, Any]) -> str:
-        raw = json.dumps(data, sort_keys=True, separators=(',', ':'))
-        b64_bytes = base64.urlsafe_b64encode(raw.encode('ascii'))
-        return f"ac_{b64_bytes.decode('ascii')}"
+    try:
+        while True:
+            for point in coords:
+                try:
+                    x, y = validate_coordinates(point[0], point[1])
+                    pyautogui.click(x, y)
+                    time.sleep(interval)
+                except (TypeError, IndexError):
+                    continue
+    except KeyboardInterrupt:
+        print("loop terminated by user")
 
-    @staticmethod
-    def decode_click_sequence(payload: str) -> Dict[str, Any]:
-        if not payload.startswith("ac_"):
-            raise ValueError("Invalid packet signature")
-        
-        raw = base64.urlsafe_b64decode(payload[3:].encode('ascii'))
-        return json.loads(raw.decode('ascii'))
-
-    @classmethod
-    def transform_stream(cls, inputs: list) -> list:
-        """Process raw event logs into obfuscated compact format."""
-        return [cls.encode_click_sequence(i) for i in inputs if 'x' in i and 'y' in i]
-
-    def sanitize_coordinates(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Clamps values to screen boundaries using min-max tricks."""
-        data['x'] = max(0, min(data.get('x', 0), 1920))
-        data['y'] = max(0, min(data.get('y', 0), 1080))
-        return data
+if __name__ == '__main__':
+    # Example injection: raw input stream simulation
+    stream = [(100, 100), (9999, 9999), ('invalid', 50)]
+    run_clicker_loop(stream, 0.5)
