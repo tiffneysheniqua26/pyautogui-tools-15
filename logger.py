@@ -1,38 +1,31 @@
-import logging
-from logging.handlers import RotatingFileHandler
-import os
+import datetime
+import sys
+from typing import Any, Optional
 
-def setup_logger(name: str = 'pyautogui-tools-15', log_file: str = 'autoclicker.log') -> logging.Logger:
-    """
-    Instantiates a moody, rotating logger for automated clicker events.
-    It keeps a maximum of 5 files at 1MB each because we love efficiency.
-    """
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+class ClickerLogger:
+    """Centralized diagnostic stream for pyautogui-tools-15 operations."""
 
-    if not logger.handlers:
-        # Format with a custom flair for debugging click sequences
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-            datefmt='%H:%M:%S'
-        )
+    def __init__(self, debug_mode: bool = False) -> None:
+        self.debug_mode: bool = debug_mode
 
-        # Rotating handler ensures we don't consume the entire disk drive
-        handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=1_048_576, 
-            backupCount=5
-        )
-        
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        
-        # Add a stream handler so we can watch the chaos in the console
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        logger.addHandler(console)
+    def log(self, message: str, level: str = "INFO") -> None:
+        """Formats and directs message to stdout with timestamping."""
+        timestamp: str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        output: str = f"[{timestamp}] [{level}] {message}"
+        print(output, file=sys.stdout)
 
-    return logger
+    def debug(self, message: str) -> None:
+        """Conditional debug bridge for verbose internal states."""
+        if self.debug_mode:
+            self.log(message, level="DEBUG")
 
-# Instantiate the singleton instance for global module access
-autoclicker_logger = setup_logger()
+    def warn(self, message: str, attachment: Optional[Any] = None) -> None:
+        """Non-fatal warning notification helper."""
+        content: str = f"{message} | Extra: {attachment}" if attachment else message
+        self.log(content, level="WARN")
+
+    @staticmethod
+    def panic(message: str) -> None:
+        """Abrupt termination utility for critical clicker failures."""
+        print(f"!!! CRITICAL: {message} !!!", file=sys.stderr)
+        sys.exit(1)
