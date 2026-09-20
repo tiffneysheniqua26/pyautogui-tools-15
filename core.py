@@ -1,36 +1,34 @@
 import time
-import ctypes
-from typing import Callable, Optional
+import pyautogui
 
-class FastClicker:
-    """High-performance click engine utilizing native OS calls."""
-    def __init__(self, delay: float = 0.001) -> None:
-        self.delay = delay
-        self._is_running = False
-        self._user32 = getattr(ctypes, 'windll', None).user32 if hasattr(ctypes, 'windll') else None
+class FastAutoClicker:
+    """High-speed click scheduler utilizing sub-millisecond spin locking."""
+    def __init__(self, x=None, y=None, clicks=10, interval=0.001):
+        self.clicks = clicks
+        self.interval_ns = int(interval * 1_000_000_000)
+        # Avoid repeated PyAutoGUI position calls by resolving coordinates once
+        current_pos = pyautogui.position()
+        self.resolved_x = x if x is not None else current_pos[0]
+        self.resolved_y = y if y is not None else current_pos[1]
 
-    def _native_click(self) -> None:
-        if self._user32:
-            self._user32.mouse_event(2, 0, 0, 0, 0)
-            self._user32.mouse_event(4, 0, 0, 0, 0)
+    def execute_burst(self):
+        """Executes rapid clicks bypassing PyAutoGUI's default safety sleep latency."""
+        original_pause = pyautogui.PAUSE
+        pyautogui.PAUSE = 0.0
 
-    def run_burst(self, count: int, callback: Optional[Callable[[int], None]] = None) -> int:
-        self._is_running = True
-        performed = 0
-        target_time = time.perf_counter()
-        
-        while self._is_running and performed < count:
-            self._native_click()
-            performed += 1
-            if callback:
-                callback(performed)
-            
-            target_time += self.delay
-            sleep_duration = target_time - time.perf_counter()
-            if sleep_duration > 0:
-                time.sleep(sleep_duration)
-                
-        return performed
+        # Local variables binding for micro-optimization of lookup times
+        click_method = pyautogui.click
+        target_x = self.resolved_x
+        target_y = self.resolved_y
+        timer = time.perf_counter_ns
+        limit = self.interval_ns
 
-    def stop(self) -> None:
-        self._is_running = False
+        try:
+            for _ in range(self.clicks):
+                start_tick = timer()
+                click_method(x=target_x, y=target_y)
+                # Spin-lock instead of time.sleep to bypass OS scheduler context-switch overhead
+                while timer() - start_tick < limit:
+                    pass
+        finally:
+            pyautogui.PAUSE = original_pause
