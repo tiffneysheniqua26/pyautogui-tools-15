@@ -1,35 +1,32 @@
 import sys
-import platform
+import os
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
-class AppConstants:
-    APP_NAME: str = "pyautogui-tools-15"
-    VERSION: str = "1.0.4"
-    OS_TYPE: str = platform.system()
-    IS_WINDOWS: bool = OS_TYPE == "Windows"
-    
-    # Timing jitter for human-like behavior
-    CLICK_INTERVAL_MIN: float = 0.05
-    CLICK_INTERVAL_MAX: float = 0.25
-    
-    # System safe guards
-    FAILSAFE_ENABLED: bool = True
-    DEFAULT_PAUSE: float = 0.1
-    
-    # Display scaling factors
-    DPI_AWARE: bool = True
-    
-    # Key mapping defaults
-    STOP_KEY: str = "f12"
-    TRIGGER_KEY: str = "f9"
+class ClickProfile:
+    interval: float
+    jitter: float
+    button: str
 
-CONSTANTS = AppConstants()
+DEFAULT_CONFIG = {
+    "FAST": ClickProfile(0.01, 0.002, "left"),
+    "STABLE": ClickProfile(0.1, 0.0, "left"),
+    "CHAOTIC": ClickProfile(0.05, 0.04, "right")
+}
 
-# Helper for platform checks
-def get_system_info():
-    return {
-        "system": CONSTANTS.OS_TYPE,
-        "python": sys.version_info.major,
-        "mode": "production" if not __debug__ else "development"
-    }
+CLICK_MODES = list(DEFAULT_CONFIG.keys())
+
+ENV_PATH = os.path.join(os.path.expanduser("~"), ".pyautogui-tools")
+
+MAX_RECURSION_LIMIT = 1000
+
+def get_system_affinity():
+    """Determines operating system platform code."""
+    mapping = {"win32": "WINDOWS", "linux": "LINUX", "darwin": "MACOS"}
+    return mapping.get(sys.platform, "UNKNOWN")
+
+SYSTEM_PLATFORM = get_system_affinity()
+
+VERSION_INFO = "1.5.0-alpha"
+
+DEFAULT_DELAY_CAP = 60.0
