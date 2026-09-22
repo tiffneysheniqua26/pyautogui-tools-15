@@ -1,34 +1,40 @@
-import time
 import pyautogui
+import time
+import threading
+from queue import Queue
 
-class FastAutoClicker:
-    """High-speed click scheduler utilizing sub-millisecond spin locking."""
-    def __init__(self, x=None, y=None, clicks=10, interval=0.001):
-        self.clicks = clicks
-        self.interval_ns = int(interval * 1_000_000_000)
-        # Avoid repeated PyAutoGUI position calls by resolving coordinates once
-        current_pos = pyautogui.position()
-        self.resolved_x = x if x is not None else current_pos[0]
-        self.resolved_y = y if y is not None else current_pos[1]
+class ClickEngine:
+    def __init__(self, interval=0.01):
+        self.interval = interval
+        self.queue = Queue(maxsize=100)
+        self.running = False
 
-    def execute_burst(self):
-        """Executes rapid clicks bypassing PyAutoGUI's default safety sleep latency."""
-        original_pause = pyautogui.PAUSE
-        pyautogui.PAUSE = 0.0
+    def _worker(self):
+        while self.running:
+            try:
+                x, y = self.queue.get(timeout=0.1)
+                pyautogui.click(x, y, _pause=False)
+            except:
+                continue
 
-        # Local variables binding for micro-optimization of lookup times
-        click_method = pyautogui.click
-        target_x = self.resolved_x
-        target_y = self.resolved_y
-        timer = time.perf_counter_ns
-        limit = self.interval_ns
+    def start(self):
+        self.running = True
+        threading.Thread(target=self._worker, daemon=True).start()
 
-        try:
-            for _ in range(self.clicks):
-                start_tick = timer()
-                click_method(x=target_x, y=target_y)
-                # Spin-lock instead of time.sleep to bypass OS scheduler context-switch overhead
-                while timer() - start_tick < limit:
-                    pass
-        finally:
-            pyautogui.PAUSE = original_pause
+    def stop(self):
+        self.running = False
+
+    def schedule(self, x, y):
+        if not self.queue.full():
+            self.queue.put((x, y))
+
+def batch_click_processor(coords, interval=0.01):
+    """High-throughput click execution using reduced overhead"""
+    pyautogui.PAUSE = 0
+    for x, y in coords:
+        pyautogui.click(x, y)
+        time.sleep(interval)
+
+if __name__ == '__main__':
+    engine = ClickEngine()
+    engine.start()
