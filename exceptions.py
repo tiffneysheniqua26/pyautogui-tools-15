@@ -1,31 +1,51 @@
-import time
-import functools
+from typing import Optional, Tuple
 
-class PyAutoToolsError(Exception):
-    """Base exception for the toolkit."""
 
-class PerformanceConstraintError(PyAutoToolsError):
-    """Raised when core loop latency exceeds threshold."""
+class AutoClickerError(Exception):
+    """Base exception class for all custom pyautogui-tools-15 operational anomalies."""
 
-def throttle_check(threshold_ms: float):
-    """Decorator injecting non-blocking performance assertions."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            start = time.perf_counter()
-            result = func(*args, **kwargs)
-            duration = (time.perf_counter() - start) * 1000
-            if duration > threshold_ms:
-                raise PerformanceConstraintError(f"Operation {func.__name__} took {duration:.2f}ms")
-            return result
-        return wrapper
-    return decorator
+    def __init__(self, message: str, severity: str = "LOW") -> None:
+        super().__init__(message)
+        self.severity: str = severity.upper()
 
-class RapidFireException(PyAutoToolsError):
-    """Specialized exception for event queue overflows."""
-    def __init__(self, queue_depth: int):
-        self.queue_depth = queue_depth
-        super().__init__(f"Event queue saturated at {queue_depth} operations")
+    def __str__(self) -> str:
+        return f"[{self.severity}] {super().__str__()}"
 
-class HardwareAbstractionError(PyAutoToolsError):
-    """Interface layer failure for low-level inputs."""
+
+class ScreenCoordOutOfBoundsError(AutoClickerError):
+    """Raised when a target coordinates projection falls outside physical screen dimensions."""
+
+    def __init__(
+        self, 
+        message: str, 
+        attempted_coords: Tuple[int, int], 
+        screen_resolution: Optional[Tuple[int, int]] = None
+    ) -> None:
+        super().__init__(message, severity="MEDIUM")
+        self.attempted_coords: Tuple[int, int] = attempted_coords
+        self.screen_resolution: Optional[Tuple[int, int]] = screen_resolution
+
+    def radar_diagnostic(self) -> str:
+        """Generates a creative telemetry readout illustrating where the miss occurred."""
+        if not self.screen_resolution:
+            return f"Out of bounds: {self.attempted_coords}. Screen limits undetected."
+
+        sw, sh = self.screen_resolution
+        ax, ay = self.attempted_coords
+        
+        horiz_dir = "LEFT" if ax < 0 else ("RIGHT" if ax >= sw else "OK")
+        vert_dir = "ABOVE" if ay < 0 else ("BELOW" if ay >= sh else "OK")
+
+        return (
+            f"--- TELEMETRY MISALIGNMENT REPORT ---\n"
+            f"Resolution Bound: {sw}x{sh} | Targeted Coordinates: ({ax}, {ay})\n"
+            f"Directional Deviation: Horizontal={horiz_dir}, Vertical={vert_dir}\n"
+            f"--------------------------------------"
+        )
+
+
+class SafetyLockoutError(AutoClickerError):
+    """Raised when the fail-safe trigger threshold is breached to prevent desktop destruction."""
+
+    def __init__(self, message: str = "Autoclicker failsafe activated. Safe zone breached!") -> None:
+        super().__init__(message, severity="CRITICAL")
