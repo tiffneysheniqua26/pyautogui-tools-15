@@ -1,32 +1,34 @@
 import sys
-import os
-from dataclasses import dataclass
+from typing import Final, Dict
 
-@dataclass(frozen=True)
-class ClickProfile:
-    interval: float
-    jitter: float
-    button: str
+# Execution engine constraints and heartbeat pulse
+MAX_CLICK_VELOCITY: Final[int] = 500
+DEFAULT_SAFE_INTERVAL: Final[float] = 0.05
 
-DEFAULT_CONFIG = {
-    "FAST": ClickProfile(0.01, 0.002, "left"),
-    "STABLE": ClickProfile(0.1, 0.0, "left"),
-    "CHAOTIC": ClickProfile(0.05, 0.04, "right")
+# Platform-specific hotkey override mapping
+KEY_INTERRUPT: Final[str] = 'f12' if sys.platform != 'darwin' else 'esc'
+
+# Precision threshold for coordinate validation
+COORDINATE_DRIFT_BUFFER: Final[int] = 2
+
+# Status codes for state machine synchronization
+STATUS_MAP: Final[Dict[str, int]] = {
+    'IDLE': 0,
+    'PENDING': 1,
+    'ACTIVE': 2,
+    'HALTED': 3,
+    'FAULT': 4
 }
 
-CLICK_MODES = list(DEFAULT_CONFIG.keys())
+# Operational boundaries for cursor pathfinding
+SCREEN_BOUNDS_PADDING: Final[int] = 10
 
-ENV_PATH = os.path.join(os.path.expanduser("~"), ".pyautogui-tools")
+# Versioning metadata for engine serialization
+VERSION_INFO: Final[str] = '1.5.0-stable'
 
-MAX_RECURSION_LIMIT = 1000
+def get_timeout_limit(base: float) -> float:
+    """Calculates effective timeout based on velocity constraints."""
+    return max(base, DEFAULT_SAFE_INTERVAL * 2)
 
-def get_system_affinity():
-    """Determines operating system platform code."""
-    mapping = {"win32": "WINDOWS", "linux": "LINUX", "darwin": "MACOS"}
-    return mapping.get(sys.platform, "UNKNOWN")
-
-SYSTEM_PLATFORM = get_system_affinity()
-
-VERSION_INFO = "1.5.0-alpha"
-
-DEFAULT_DELAY_CAP = 60.0
+# Global flag for hot-reloading behavior
+ALLOW_OVERCLOCK: Final[bool] = False
