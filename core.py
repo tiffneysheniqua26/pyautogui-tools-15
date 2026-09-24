@@ -1,40 +1,38 @@
 import pyautogui
 import time
-import threading
-from queue import Queue
+import logging
 
-class ClickEngine:
-    def __init__(self, interval=0.01):
+class ClickerEngine:
+    def __init__(self, interval=0.1):
         self.interval = interval
-        self.queue = Queue(maxsize=100)
-        self.running = False
+        self.active = False
+        pyautogui.FAILSAFE = True
 
-    def _worker(self):
-        while self.running:
-            try:
-                x, y = self.queue.get(timeout=0.1)
-                pyautogui.click(x, y, _pause=False)
-            except:
-                continue
+    def run(self, iterations=100):
+        self.active = True
+        try:
+            for i in range(iterations):
+                if not self.active:
+                    break
+                x, y = pyautogui.position()
+                pyautogui.click(x, y)
+                time.sleep(self.interval)
+        except pyautogui.FailSafeException:
+            logging.warning('Failsafe triggered by user cursor movement')
+        except pyautogui.PyAutoGUIException as e:
+            logging.error(f'System constraint violation: {e}')
+        except KeyboardInterrupt:
+            logging.info('Manual abort signal received')
+        finally:
+            self.active = False
 
-    def start(self):
-        self.running = True
-        threading.Thread(target=self._worker, daemon=True).start()
+    def emergency_stop(self):
+        self.active = False
 
-    def stop(self):
-        self.running = False
-
-    def schedule(self, x, y):
-        if not self.queue.full():
-            self.queue.put((x, y))
-
-def batch_click_processor(coords, interval=0.01):
-    """High-throughput click execution using reduced overhead"""
-    pyautogui.PAUSE = 0
-    for x, y in coords:
+def perform_click(x, y):
+    try:
+        if x < 0 or y < 0:
+            raise ValueError('Coordinates outside screen bounds')
         pyautogui.click(x, y)
-        time.sleep(interval)
-
-if __name__ == '__main__':
-    engine = ClickEngine()
-    engine.start()
+    except (pyautogui.ImageNotFoundException, ValueError) as e:
+        logging.error(f'Click operation failure: {e}')
