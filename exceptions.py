@@ -1,51 +1,29 @@
-from typing import Optional, Tuple
+from typing import Optional
 
+class PyAutoGUIError(Exception):
+    """Base exception for the pyautogui-tools-15 suite."""
+    pass
 
-class AutoClickerError(Exception):
-    """Base exception class for all custom pyautogui-tools-15 operational anomalies."""
+class ConfigurationError(PyAutoGUIError):
+    """Raised when the autoclicker configuration is invalid."""
+    def __init__(self, message: str, config_key: Optional[str] = None) -> None:
+        self.config_key = config_key
+        super().__init__(f"Invalid config '{config_key}': {message}" if config_key else message)
 
-    def __init__(self, message: str, severity: str = "LOW") -> None:
-        super().__init__(message)
-        self.severity: str = severity.upper()
+class ClickerExecutionError(PyAutoGUIError):
+    """Raised during unexpected runtime failures of the autoclicker."""
+    def __init__(self, code: int, context: str) -> None:
+        self.code = code
+        self.context = context
+        super().__init__(f"Execution failed at {context} (Exit Code: {code})")
 
-    def __str__(self) -> str:
-        return f"[{self.severity}] {super().__str__()}"
+class SafetyTriggerViolation(PyAutoGUIError):
+    """Raised when the fail-safe mechanism is forcibly invoked."""
+    def __init__(self, panic_message: str = "Safety override initiated") -> None:
+        self.panic_message = panic_message
+        super().__init__(panic_message)
 
-
-class ScreenCoordOutOfBoundsError(AutoClickerError):
-    """Raised when a target coordinates projection falls outside physical screen dimensions."""
-
-    def __init__(
-        self, 
-        message: str, 
-        attempted_coords: Tuple[int, int], 
-        screen_resolution: Optional[Tuple[int, int]] = None
-    ) -> None:
-        super().__init__(message, severity="MEDIUM")
-        self.attempted_coords: Tuple[int, int] = attempted_coords
-        self.screen_resolution: Optional[Tuple[int, int]] = screen_resolution
-
-    def radar_diagnostic(self) -> str:
-        """Generates a creative telemetry readout illustrating where the miss occurred."""
-        if not self.screen_resolution:
-            return f"Out of bounds: {self.attempted_coords}. Screen limits undetected."
-
-        sw, sh = self.screen_resolution
-        ax, ay = self.attempted_coords
-        
-        horiz_dir = "LEFT" if ax < 0 else ("RIGHT" if ax >= sw else "OK")
-        vert_dir = "ABOVE" if ay < 0 else ("BELOW" if ay >= sh else "OK")
-
-        return (
-            f"--- TELEMETRY MISALIGNMENT REPORT ---\n"
-            f"Resolution Bound: {sw}x{sh} | Targeted Coordinates: ({ax}, {ay})\n"
-            f"Directional Deviation: Horizontal={horiz_dir}, Vertical={vert_dir}\n"
-            f"--------------------------------------"
-        )
-
-
-class SafetyLockoutError(AutoClickerError):
-    """Raised when the fail-safe trigger threshold is breached to prevent desktop destruction."""
-
-    def __init__(self, message: str = "Autoclicker failsafe activated. Safe zone breached!") -> None:
-        super().__init__(message, severity="CRITICAL")
+def raise_if_unstable(status: bool) -> None:
+    """Checks if the system state is suitable for clicking."""
+    if not status:
+        raise ClickerExecutionError(500, "system unstable")
