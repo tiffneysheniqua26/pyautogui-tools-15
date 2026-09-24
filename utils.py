@@ -1,29 +1,29 @@
 import time
 import functools
-import random
+import logging
 
-def retry_network_call(max_retries=3, base_delay=1.0, backoff=2.0):
+logger = logging.getLogger(__name__)
+
+def retry_network_op(max_attempts=3, delay=1.5, backoff=2):
+    """decorator for exponential backoff on network tasks"""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            retries = 0
-            current_delay = base_delay
-            while retries < max_retries:
+            current_delay = delay
+            for attempt in range(1, max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
                 except (ConnectionError, TimeoutError) as e:
-                    retries += 1
-                    if retries == max_retries:
-                        raise e
-                    sleep_time = current_delay * (backoff ** (retries - 1)) + random.uniform(0, 0.1)
-                    time.sleep(sleep_time)
-            return None
+                    if attempt == max_attempts:
+                        logger.error(f"failed after {max_attempts} attempts: {e}")
+                        raise
+                    logger.warning(f"retry {attempt}/{max_attempts} in {current_delay}s...")
+                    time.sleep(current_delay)
+                    current_delay *= backoff
         return wrapper
     return decorator
 
-class NetworkState:
-    def __init__(self):
-        self.is_online = True
-
-    def check_connection(self):
-        return self.is_online
+@retry_network_op(max_attempts=4)
+def fetch_remote_config():
+    """demonstrates retry logic on external dependency fetch"""
+    return {"status": "ok", "click_rate": 0.05}
