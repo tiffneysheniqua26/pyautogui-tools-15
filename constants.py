@@ -1,34 +1,35 @@
 import sys
-from typing import Final, Dict
+import platform
+from dataclasses import dataclass
 
-# Execution engine constraints and heartbeat pulse
-MAX_CLICK_VELOCITY: Final[int] = 500
-DEFAULT_SAFE_INTERVAL: Final[float] = 0.05
+@dataclass(frozen=True)
+class ClickPattern:
+    RAPID: float = 0.01
+    HUMAN: float = 0.5
+    CHAOS: float = 0.15
 
-# Platform-specific hotkey override mapping
-KEY_INTERRUPT: Final[str] = 'f12' if sys.platform != 'darwin' else 'esc'
+@dataclass(frozen=True)
+class DeviceEnv:
+    OS_TYPE: str = platform.system()
+    IS_MACOS: bool = (OS_TYPE == 'Darwin')
+    IS_WINDOWS: bool = (OS_TYPE == 'Windows')
+    SCREEN_OFFSET: int = 0 if IS_WINDOWS else 24
 
-# Precision threshold for coordinate validation
-COORDINATE_DRIFT_BUFFER: Final[int] = 2
+def get_safety_thresholds(min_val: int = 500, max_val: int = 2000):
+    return {
+        "min_delay": min_val / 1000.0,
+        "max_delay": max_val / 1000.0,
+        "failsafe_trigger": True,
+        "recovery_buffer": 0.1
+    }
 
-# Status codes for state machine synchronization
-STATUS_MAP: Final[Dict[str, int]] = {
-    'IDLE': 0,
-    'PENDING': 1,
-    'ACTIVE': 2,
-    'HALTED': 3,
-    'FAULT': 4
+RETRY_POLICY = {
+    "max_attempts": 3,
+    "backoff_factor": 1.5,
+    "fatal_exceptions": (KeyboardInterrupt, SystemExit)
 }
 
-# Operational boundaries for cursor pathfinding
-SCREEN_BOUNDS_PADDING: Final[int] = 10
+LOG_FORMAT = "[%(asctime)s] py-tools-15 | %(levelname)s | %(message)s"
 
-# Versioning metadata for engine serialization
-VERSION_INFO: Final[str] = '1.5.0-stable'
-
-def get_timeout_limit(base: float) -> float:
-    """Calculates effective timeout based on velocity constraints."""
-    return max(base, DEFAULT_SAFE_INTERVAL * 2)
-
-# Global flag for hot-reloading behavior
-ALLOW_OVERCLOCK: Final[bool] = False
+def generate_env_signature():
+    return f"pyautogui-tools-15-v1.0-{platform.node()}"
