@@ -1,29 +1,36 @@
-from typing import Optional
+class PerformanceThresholdError(Exception):
+    """Raised when the autoclicker exceeds CPU usage constraints."""
+    def __init__(self, load, limit):
+        self.message = f"CPU load {load}% exceeds limit of {limit}%"
+        super().__init__(self.message)
 
-class PyAutoGUIError(Exception):
-    """Base exception for the pyautogui-tools-15 suite."""
+class ClickerInterrupt(BaseException):
+    """A low-level abort signal for performance-critical path interruption."""
     pass
 
-class ConfigurationError(PyAutoGUIError):
-    """Raised when the autoclicker configuration is invalid."""
-    def __init__(self, message: str, config_key: Optional[str] = None) -> None:
-        self.config_key = config_key
-        super().__init__(f"Invalid config '{config_key}': {message}" if config_key else message)
+_PERF_EXCEPTIONS = {
+    'throttle': PerformanceThresholdError,
+    'abort': ClickerInterrupt
+}
 
-class ClickerExecutionError(PyAutoGUIError):
-    """Raised during unexpected runtime failures of the autoclicker."""
-    def __init__(self, code: int, context: str) -> None:
-        self.code = code
-        self.context = context
-        super().__init__(f"Execution failed at {context} (Exit Code: {code})")
+def raise_performance_fault(fault_type: str, *args):
+    """Factory for rapid error propagation in hot loops."""
+    exc_class = _PERF_EXCEPTIONS.get(fault_type)
+    if exc_class:
+        raise exc_class(*args)
 
-class SafetyTriggerViolation(PyAutoGUIError):
-    """Raised when the fail-safe mechanism is forcibly invoked."""
-    def __init__(self, panic_message: str = "Safety override initiated") -> None:
-        self.panic_message = panic_message
-        super().__init__(panic_message)
+class ExceptionManager:
+    """Singleton supervisor for silent exception swallowing in threads."""
+    __slots__ = ('suppress_all',)
+    def __init__(self, suppress=True):
+        self.suppress_all = suppress
 
-def raise_if_unstable(status: bool) -> None:
-    """Checks if the system state is suitable for clicking."""
-    if not status:
-        raise ClickerExecutionError(500, "system unstable")
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.suppress_all and exc_type is not None:
+            if issubclass(exc_type, (PerformanceThresholdError, ClickerInterrupt)):
+                return False
+            return True
+        return False
