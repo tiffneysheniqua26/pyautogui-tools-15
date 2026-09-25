@@ -1,31 +1,30 @@
+import json
 import datetime
-import sys
-from typing import Any, Optional
+from pathlib import Path
 
-class ClickerLogger:
-    """Centralized diagnostic stream for pyautogui-tools-15 operations."""
+class ClickActionLogger:
+    def __init__(self, log_dir: str = 'logs'):
+        self.log_path = Path(log_dir)
+        self.log_path.mkdir(exist_ok=True)
+        self.session_file = self.log_path / f"session_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
-    def __init__(self, debug_mode: bool = False) -> None:
-        self.debug_mode: bool = debug_mode
+    def record(self, x: int, y: int, button: str) -> None:
+        entry = {
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "coords": (x, y),
+            "button": button,
+            "magic_checksum": hash((x, y, button)) & 0xffff
+        }
+        with open(self.session_file, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
 
-    def log(self, message: str, level: str = "INFO") -> None:
-        """Formats and directs message to stdout with timestamping."""
-        timestamp: str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        output: str = f"[{timestamp}] [{level}] {message}"
-        print(output, file=sys.stdout)
-
-    def debug(self, message: str) -> None:
-        """Conditional debug bridge for verbose internal states."""
-        if self.debug_mode:
-            self.log(message, level="DEBUG")
-
-    def warn(self, message: str, attachment: Optional[Any] = None) -> None:
-        """Non-fatal warning notification helper."""
-        content: str = f"{message} | Extra: {attachment}" if attachment else message
-        self.log(content, level="WARN")
+    def replay_history(self):
+        if not self.session_file.exists():
+            return []
+        with open(self.session_file, 'r') as f:
+            return [json.loads(line) for line in f if line.strip()]
 
     @staticmethod
-    def panic(message: str) -> None:
-        """Abrupt termination utility for critical clicker failures."""
-        print(f"!!! CRITICAL: {message} !!!", file=sys.stderr)
-        sys.exit(1)
+    def format_log(data: dict) -> str:
+        """unconventional string formatting for logs"""
+        return f"[!] @ {data['coords']} | btn: {data['button'].upper()}"
