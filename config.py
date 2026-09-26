@@ -1,37 +1,37 @@
 import json
 import os
-from typing import Any, Dict
+from typing import Dict, Any
 
 DEFAULT_CONFIG = {
-    "click_interval": 0.1,
+    "interval": 0.1,
     "button": "left",
     "failsafe": True,
-    "log_level": "INFO",
-    "max_clicks": 1000
+    "hotkey": "f6"
 }
 
 class ConfigLoader:
-    def __init__(self, filepath: str = "config.json"):
-        self.filepath = filepath
+    def __init__(self, path: str = "settings.json"):
+        self.path = path
 
     def load(self) -> Dict[str, Any]:
-        if not os.path.exists(self.filepath):
-            self._save(DEFAULT_CONFIG)
+        if not os.path.exists(self.path):
+            self._write_defaults()
             return DEFAULT_CONFIG
         try:
-            with open(self.filepath, "r") as f:
-                data = json.load(f)
-                return {**DEFAULT_CONFIG, **data}
+            with open(self.path, "r") as f:
+                user_cfg = json.load(f)
+                return {**DEFAULT_CONFIG, **user_cfg}
         except (json.JSONDecodeError, IOError):
             return DEFAULT_CONFIG
 
-    def _save(self, data: Dict[str, Any]) -> None:
+    def _write_defaults(self) -> None:
         try:
-            with open(self.filepath, "w") as f:
-                json.dump(data, f, indent=4)
-        except IOError as e:
-            print(f"Config save failure: {e}")
+            with open(self.path, "w") as f:
+                json.dump(DEFAULT_CONFIG, f, indent=4)
+        except IOError:
+            pass
 
-def get_app_config() -> Dict[str, Any]:
-    loader = ConfigLoader()
-    return loader.load()
+    def __getitem__(self, key: str) -> Any:
+        return self.load().get(key, DEFAULT_CONFIG.get(key))
+
+config = ConfigLoader()
