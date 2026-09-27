@@ -1,30 +1,56 @@
-import json
-import datetime
-from pathlib import Path
+import os
+import time
+from typing import Generator, List, Tuple
 
-class ClickActionLogger:
-    def __init__(self, log_dir: str = 'logs'):
-        self.log_path = Path(log_dir)
-        self.log_path.mkdir(exist_ok=True)
-        self.session_file = self.log_path / f"session_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
 
-    def record(self, x: int, y: int, button: str) -> None:
-        entry = {
-            "timestamp": datetime.datetime.utcnow().isoformat(),
-            "coords": (x, y),
-            "button": button,
-            "magic_checksum": hash((x, y, button)) & 0xffff
-        }
-        with open(self.session_file, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
+class ClickTelemetryLogger:
+    """Space-efficient log handler compressing continuous static autoclick coordinates."""
 
-    def replay_history(self):
-        if not self.session_file.exists():
-            return []
-        with open(self.session_file, 'r') as f:
-            return [json.loads(line) for line in f if line.strip()]
+    def __init__(self, log_path: str = "autoclick_events.telemetry"):
+        self.log_path = log_path
+        self._cache: List[Tuple[int, int, float]] = []
 
-    @staticmethod
-    def format_log(data: dict) -> str:
-        """unconventional string formatting for logs"""
-        return f"[!] @ {data['coords']} | btn: {data['button'].upper()}"
+    def record(self, x: int, y: int) -> None:
+        """Records click coordinates into memory cache, flushing every 5 events."""
+        self._cache.append((x, y, time.time()))
+        if len(self._cache) >= 5:
+            self.write_out()
+
+    def write_out(self) -> None:
+        """Encodes identical coordinate bursts to reduce log size."""
+        if not self._cache:
+            return
+
+        encoded_blocks: List[str] = []
+        anchor_x, anchor_y, anchor_t = self._cache[0]
+        count = 1
+
+        for x, y, t in self._cache[1:]:
+            if x == anchor_x and y == anchor_y:
+                count += 1
+            else:
+                encoded_blocks.append(f"{anchor_x},{anchor_y}*{count}@{anchor_t:.2f}")
+                anchor_x, anchor_y, anchor_t = x, y, t
+                count = 1
+        encoded_blocks.append(f"{anchor_x},{anchor_y}*{count}@{anchor_t:.2f}")
+
+        with open(self.log_path, "a", encoding="utf-8") as file_stream:
+            file_stream.write(":".join(encoded_blocks) + "\n")
+
+        self._cache.clear()
+
+    def parse_events(self) -> Generator[Tuple[int, int, int, float], None, None]:
+        """Reconstructs logged actions mapping back coordinates, counts, and stamps."""
+        if not os.path.exists(self.log_path):
+            return
+        with open(self.log_path, "r", encoding="utf-8") as file_stream:
+            for row in file_stream:
+                cleaned = row.strip()
+                if not cleaned:
+                    continue
+                for element in cleaned.split(":"):
+                    if "@" in element and "*" in element:
+                        spatial, timestamp = element.split("@")
+                        coords, count = spatial.split("*")
+                        cx, cy = map(int, coords.split(","))
+                        yield cx, cy, int(count), float(timestamp)
