@@ -1,50 +1,37 @@
+import pyautogui
 import time
-import urllib.request
-import urllib.error
-import random
+import collections
+from threading import Thread
 
-try:
-    import pyautogui
-except ImportError:
-    pyautogui = None
+class EventProcessor:
+    def __init__(self, buffer_size=1024):
+        self.queue = collections.deque(maxlen=buffer_size)
+        self.active = True
 
-def jiggle_mouse(intensity=5):
-    """Slightly jiggles the mouse cursor during retry waits to prevent system sleep."""
-    if pyautogui:
-        try:
-            x, y = pyautogui.position()
-            pyautogui.moveTo(
-                x + random.randint(-intensity, intensity),
-                y + random.randint(-intensity, intensity),
-                duration=0.1
-            )
-        except Exception:
-            pass
+    def schedule_click(self, x, y):
+        self.queue.append((x, y))
 
-def fibonacci_backoff(max_retries=5):
-    """Generates Fibonacci numbers for delay intervals."""
-    a, b = 1, 2
-    for _ in range(max_retries):
-        yield a
-        a, b = b, a + b
+    def process_burst(self):
+        while self.active and self.queue:
+            pos = self.queue.popleft()
+            pyautogui.click(pos[0], pos[1])
 
-def fetch_remote_clicks(url, max_retries=4):
-    """
-    Fetches remote click instructions with Fibonacci backoff and physical mouse feedback.
-    Jiggles mouse pointer during wait intervals to maintain active state.
-    """
-    delays = list(fibonacci_backoff(max_retries))
-    for attempt, delay in enumerate(delays, start=1):
-        try:
-            with urllib.request.urlopen(url, timeout=3) as response:
-                return response.read().decode('utf-8')
-        except (urllib.error.URLError, urllib.error.HTTPError) as e:
-            if attempt == max_retries:
-                raise RuntimeError(f"Network error after {max_retries} retries: {e}")
-            
-            # Dynamic delay with mouse jiggle animation
-            steps = max(1, int(delay * 5))
-            step_duration = delay / steps
-            for _ in range(steps):
-                time.sleep(step_duration)
-                jiggle_mouse(intensity=attempt * 2)
+    def run_worker(self):
+        while self.active:
+            if self.queue:
+                self.process_burst()
+            else:
+                time.sleep(0.001)
+
+    def start(self):
+        self.thread = Thread(target=self.run_worker, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        self.active = False
+        self.thread.join()
+
+def optimized_click_factory():
+    proc = EventProcessor()
+    pyautogui.PAUSE = 0
+    return proc
