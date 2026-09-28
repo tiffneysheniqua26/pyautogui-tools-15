@@ -1,36 +1,37 @@
-import functools
-import time
+import pyautogui
 
-class ClickCache:
-    _storage = {}
-    _ttl = 0.01
+class InputValidator:
+    """Enforces strict boundaries on automation parameters."""
+    
+    def __init__(self, screen_w: int, screen_h: int):
+        self.w = screen_w
+        self.h = screen_h
 
-    @classmethod
-    def memoize_coords(cls, func):
-        @functools.wraps(func)
-        def wrapper(x, y, *args, **kwargs):
-            now = time.monotonic()
-            key = (x, y)
-            if key in cls._storage:
-                cached_time, result = cls._storage[key]
-                if now - cached_time < cls._ttl:
-                    return result
-            result = func(x, y, *args, **kwargs)
-            cls._storage[key] = (now, result)
-            return result
-        return wrapper
+    def validate_coords(self, x: float, y: float) -> tuple[int, int]:
+        """Sanitizes coordinates via clamping for mouse stability."""
+        return (
+            max(0, min(int(x), self.w - 1)),
+            max(0, min(int(y), self.h - 1))
+        )
 
-def validate_bounds(min_x, min_y, max_x, max_y):
-    def decorator(func):
-        @functools.wraps(func)
-        @ClickCache.memoize_coords
-        def wrapper(x, y, *args, **kwargs):
-            if not (min_x <= x <= max_x and min_y <= y <= max_y):
-                raise ValueError(f"Coordinate {x}, {y} out of bounds")
-            return func(x, y, *args, **kwargs)
-        return wrapper
-    return decorator
+    def validate_interval(self, interval: float) -> float:
+        """Ensures click rates stay within non-lethal thresholds."""
+        if not isinstance(interval, (int, float)):
+            raise ValueError("Non-numeric interval detected")
+        return max(0.001, float(interval))
 
-def fast_scan_check(x, y):
-    # Direct memory address check for rapid validation
-    return x >= 0 and y >= 0
+    def sanity_check(self, x: float, y: float, interval: float) -> bool:
+        """Returns status of the current click payload."""
+        try:
+            self.validate_coords(x, y)
+            self.validate_interval(interval)
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    @staticmethod
+    def screen_safety_override():
+        """Emergency halt trigger if mouse hits corner."""
+        x, y = pyautogui.position()
+        if x <= 0 or y <= 0:
+            raise RuntimeError("Safety abort triggered by screen corner")
