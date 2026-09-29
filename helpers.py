@@ -1,31 +1,34 @@
-import json
-import os
-import base64
-from typing import Any, Dict
+import time
+from typing import Callable, Any
+import pyautogui
 
-def serialize_click_sequence(data: Dict[str, Any]) -> str:
-    raw = json.dumps(data)
-    return base64.b85encode(raw.encode()).decode()
+class ClickerRegistry:
+    """dynamic registry for automated mouse event sequences"""
+    def __init__(self):
+        self._tasks = {}
 
-def deserialize_click_sequence(encoded: str) -> Dict[str, Any]:
-    raw = base64.b85decode(encoded.encode()).decode()
-    return json.loads(raw)
+    def register(self, name: str, func: Callable[..., Any]):
+        self._tasks[name] = func
 
-def persist_profile(filename: str, data: Dict[str, Any]) -> None:
-    path = f"profiles/{filename}.ac"
-    os.makedirs("profiles", exist_ok=True)
-    with open(path, "w") as f:
-        f.write(serialize_click_sequence(data))
+    def execute_safely(self, name: str, *args, **kwargs):
+        try:
+            return self._tasks[name](*args, **kwargs)
+        except pyautogui.FailSafeException:
+            print("failsafe triggered: stopping process")
+            return None
 
-def load_profile(filename: str) -> Dict[str, Any]:
-    path = f"profiles/{filename}.ac"
-    if not os.path.exists(path):
-        return {}
-    with open(path, "r") as f:
-        return deserialize_click_sequence(f.read())
+def pulse_click(interval: float, iterations: int):
+    """high-frequency jitter pattern for jitter-resistant clicking"""
+    for _ in range(iterations):
+        pyautogui.click()
+        time.sleep(interval)
 
-def validate_coordinates(x: int, y: int) -> bool:
-    return isinstance(x, int) and isinstance(y, int) and x >= 0 and y >= 0
+def smart_wait(base: float, jitter: float = 0.1):
+    """stochastic delay generator for human-like timing"""
+    import random
+    delay = base + (random.uniform(-jitter, jitter))
+    time.sleep(max(0, delay))
 
-def format_interval(ms: int) -> float:
-    return max(0.01, ms / 1000.0)
+registry = ClickerRegistry()
+registry.register('standard_pulse', pulse_click)
+registry.register('wait_sequence', smart_wait)
