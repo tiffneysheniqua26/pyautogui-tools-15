@@ -1,41 +1,37 @@
-import json
-import os
-from typing import Dict, Any
+import pyautogui
+import time
+import threading
+from typing import Callable, Optional
 
-class ClickProfileManager:
-    def __init__(self, storage_path: str = "profiles.json"):
-        self.storage = storage_path
-
-    def serialize_coordinates(self, data: Dict[str, Any]) -> str:
-        return json.dumps({k: tuple(v) if isinstance(v, list) else v for k, v in data.items()})
-
-    def save_profile(self, name: str, config: Dict[str, Any]) -> None:
-        current_data = self._load_all()
-        current_data[name] = config
-        with open(self.storage, 'w') as f:
-            json.dump(current_data, f, indent=4)
-
-    def _load_all(self) -> Dict[str, Any]:
-        if not os.path.exists(self.storage):
-            return {}
-        with open(self.storage, 'r') as f:
-            try:
-                return json.load(f)
-            except json.JSONDecodeError:
-                return {}
-
-    def get_config(self, name: str) -> Dict[str, Any]:
-        return self._load_all().get(name, {})
-
-    def flush_profiles(self) -> None:
-        if os.path.exists(self.storage):
-            os.remove(self.storage)
-
-# Dynamic dispatch for configuration handling
 class ClickHandler:
-    def __init__(self):
-        self.manager = ClickProfileManager()
+    def __init__(self, interval: float = 0.1):
+        self.interval = interval
+        self._stop_event = threading.Event()
+        self._thread: Optional[threading.Thread] = None
 
-    def __call__(self, profile: str) -> Dict[str, Any]:
-        data = self.manager.get_config(profile)
-        return {k.upper(): v for k, v in data.items()}
+    def _execute_loop(self, func: Callable[[], None]) -> None:
+        while not self._stop_event.is_set():
+            func()
+            time.sleep(self.interval)
+
+    def start(self, action: Callable[[], None]) -> None:
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._execute_loop, args=(action,))
+        self._thread.daemon = True
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join()
+
+class AutoClicker(ClickHandler):
+    def click_at(self, x: int, y: int, button: str = 'left') -> None:
+        def action():
+            pyautogui.click(x=x, y=y, button=button)
+        self.start(action)
+
+    def fast_click(self) -> None:
+        def action():
+            pyautogui.click()
+        self.start(action)
