@@ -3,34 +3,37 @@ import os
 from typing import Any, Dict
 
 DEFAULT_CONFIG = {
-    'interval': 0.1,
-    'button': 'left',
-    'clicks': 1,
-    'failsafe': True
+    "click_interval": 0.1,
+    "button": "left",
+    "failsafe": True,
+    "hotkey": "f9",
+    "repeat": 0
 }
 
 class ConfigLoader:
-    def __init__(self, path: str = 'settings.json'):
+    def __init__(self, path: str = "settings.json"):
         self.path = path
-        self.data = self._load_or_create()
+        self.data = self._initialize_defaults()
 
-    def _load_or_create(self) -> Dict[str, Any]:
+    def _initialize_defaults(self) -> Dict[str, Any]:
         if not os.path.exists(self.path):
-            with open(self.path, 'w') as f:
+            with open(self.path, "w") as f:
                 json.dump(DEFAULT_CONFIG, f, indent=4)
             return DEFAULT_CONFIG
-        
+        return self._load_from_disk()
+
+    def _load_from_disk(self) -> Dict[str, Any]:
         try:
-            with open(self.path, 'r') as f:
-                user_cfg = json.load(f)
-                return {**DEFAULT_CONFIG, **user_cfg}
+            with open(self.path, "r") as f:
+                user_config = json.load(f)
+                return {**DEFAULT_CONFIG, **user_config}
         except (json.JSONDecodeError, IOError):
             return DEFAULT_CONFIG
 
-    def get(self, key: str, default: Any = None) -> Any:
-        return self.data.get(key, default)
+    def get(self, key: str, fallback: Any = None) -> Any:
+        return self.data.get(key, fallback)
 
-    def __getitem__(self, key: str) -> Any:
-        return self.data[key]
+    def refresh(self) -> None:
+        self.data = self._load_from_disk()
 
 config_instance = ConfigLoader()
