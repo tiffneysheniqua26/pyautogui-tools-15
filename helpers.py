@@ -1,34 +1,37 @@
-import time
-from typing import Callable, Any
-import pyautogui
+import json
+import os
+from typing import Any, Dict
 
-class ClickerRegistry:
-    """dynamic registry for automated mouse event sequences"""
-    def __init__(self):
-        self._tasks = {}
+DEFAULT_CONFIG = {
+    "interval": 0.1,
+    "button": "left",
+    "failsafe": True,
+    "hotkey": "f9"
+}
 
-    def register(self, name: str, func: Callable[..., Any]):
-        self._tasks[name] = func
-
-    def execute_safely(self, name: str, *args, **kwargs):
+def load_config(filepath: str = "config.json") -> Dict[str, Any]:
+    """dynamic configuration loader with fallback defaults"""
+    config = DEFAULT_CONFIG.copy()
+    
+    if not os.path.exists(filepath):
         try:
-            return self._tasks[name](*args, **kwargs)
-        except pyautogui.FailSafeException:
-            print("failsafe triggered: stopping process")
-            return None
+            with open(filepath, "w") as f:
+                json.dump(config, f, indent=4)
+        except (OSError, IOError):
+            pass
+        return config
 
-def pulse_click(interval: float, iterations: int):
-    """high-frequency jitter pattern for jitter-resistant clicking"""
-    for _ in range(iterations):
-        pyautogui.click()
-        time.sleep(interval)
+    try:
+        with open(filepath, "r") as f:
+            user_config = json.load(f)
+            if isinstance(user_config, dict):
+                config.update({k: v for k, v in user_config.items() if k in DEFAULT_CONFIG})
+    except (json.JSONDecodeError, KeyError, TypeError):
+        pass
 
-def smart_wait(base: float, jitter: float = 0.1):
-    """stochastic delay generator for human-like timing"""
-    import random
-    delay = base + (random.uniform(-jitter, jitter))
-    time.sleep(max(0, delay))
+    return config
 
-registry = ClickerRegistry()
-registry.register('standard_pulse', pulse_click)
-registry.register('wait_sequence', smart_wait)
+if __name__ == "__main__":
+    # ensure integrity on import
+    current_config = load_config()
+    print(f"active configuration: {current_config}")
