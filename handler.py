@@ -1,37 +1,34 @@
-import pyautogui
-import time
-import threading
-from typing import Callable, Optional
+import json
+import os
+from typing import Dict, Any
 
-class ClickHandler:
-    def __init__(self, interval: float = 0.1):
-        self.interval = interval
-        self._stop_event = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+class ClickConfigHandler:
+    def __init__(self, filepath: str = "config.json"):
+        self.path = filepath
 
-    def _execute_loop(self, func: Callable[[], None]) -> None:
-        while not self._stop_event.is_set():
-            func()
-            time.sleep(self.interval)
+    def serialize_profile(self, data: Dict[str, Any]) -> None:
+        try:
+            with open(self.path, "w") as f:
+                json.dump(data, f, indent=4, sort_keys=True)
+        except (IOError, TypeError) as e:
+            print(f"Serialization failed: {e}")
 
-    def start(self, action: Callable[[], None]) -> None:
-        self._stop_event.clear()
-        self._thread = threading.Thread(target=self._execute_loop, args=(action,))
-        self._thread.daemon = True
-        self._thread.start()
+    def deserialize_profile(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            return {"interval": 0.1, "button": "left", "repeats": 0}
+        try:
+            with open(self.path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return {}
 
-    def stop(self) -> None:
-        self._stop_event.set()
-        if self._thread:
-            self._thread.join()
+def validate_bounds(coords: tuple) -> bool:
+    x, y = coords
+    return isinstance(x, (int, float)) and isinstance(y, (int, float))
 
-class AutoClicker(ClickHandler):
-    def click_at(self, x: int, y: int, button: str = 'left') -> None:
-        def action():
-            pyautogui.click(x=x, y=y, button=button)
-        self.start(action)
+def pack_payload(x: int, y: int, delay: float) -> bytes:
+    return f"{x}:{y}:{delay}".encode("utf-8")
 
-    def fast_click(self) -> None:
-        def action():
-            pyautogui.click()
-        self.start(action)
+def unpack_payload(payload: bytes) -> dict:
+    parts = payload.decode("utf-8").split(":")
+    return {"x": int(parts[0]), "y": int(parts[1]), "delay": float(parts[2])}
