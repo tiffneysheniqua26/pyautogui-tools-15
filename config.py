@@ -1,34 +1,35 @@
 import json
 import os
-from pathlib import Path
+from typing import Any, Dict
 
-DEFAULT_SETTINGS = {
-    "interval": 0.1,
+DEFAULT_CONFIG = {
+    "interval": 0.01,
     "button": "left",
     "failsafe": True,
-    "hotkey": "f9"
+    "hotkey": "f6"
 }
 
-def load_config(path: str = "config.json") -> dict:
-    config_path = Path(path)
-    if not config_path.exists():
+class ConfigLoader:
+    def __init__(self, path: str = "settings.json"):
+        self.path = path
+        self.data = self._load()
+
+    def _load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            self._save(DEFAULT_CONFIG)
+            return DEFAULT_CONFIG
         try:
-            with open(config_path, 'w') as f:
-                json.dump(DEFAULT_SETTINGS, f, indent=4)
-        except (IOError, PermissionError):
-            return DEFAULT_SETTINGS
-        return DEFAULT_SETTINGS
+            with open(self.path, "r") as f:
+                loaded = json.load(f)
+            return {**DEFAULT_CONFIG, **loaded}
+        except (json.JSONDecodeError, IOError):
+            return DEFAULT_CONFIG
 
-    try:
-        with open(config_path, 'r') as f:
-            data = json.load(f)
-            return {**DEFAULT_SETTINGS, **data}
-    except (json.JSONDecodeError, KeyError):
-        return DEFAULT_SETTINGS
-
-def save_config(data: dict, path: str = "config.json"):
-    try:
-        with open(path, 'w') as f:
+    def _save(self, data: Dict[str, Any]) -> None:
+        with open(self.path, "w") as f:
             json.dump(data, f, indent=4)
-    except IOError:
-        pass
+
+    def get(self, key: str) -> Any:
+        return self.data.get(key, DEFAULT_CONFIG.get(key))
+
+settings = ConfigLoader()
