@@ -1,39 +1,35 @@
 import logging
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
+import sys
+import os
 
-LOG_DIR = Path("logs")
-LOG_FILE = LOG_DIR / "autoclicker.log"
-
-def setup_logger(name: str = "pyautogui-tools-15") -> logging.Logger:
-    """ Initialize rotating file logger for click event tracing """
-    LOG_DIR.mkdir(exist_ok=True)
-    
+def setup_logger(name='pyautogui_tools', log_file='autoclicker.log'):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
     formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)-8s | %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        '%(asctime)s | %(levelname)-8s | %(filename)s:%(lineno)d | %(message)s'
     )
 
-    # rotating handler: 2MB max, keep 5 backups
-    handler = RotatingFileHandler(
-        LOG_FILE, 
-        maxBytes=2 * 1024 * 1024, 
-        backupCount=5,
-        encoding="utf-8"
+    # Console output for real-time visibility
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Rotating file handler (5MB per file, keep 3 backups)
+    file_handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=5*1024*1024, 
+        backupCount=3
     )
-    
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    # console fallback for dev visibility
-    console = logging.StreamHandler()
-    console.setFormatter(formatter)
-    logger.addHandler(console)
-    
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Adding a subtle trick: logging system state if logs are missing
+    if not os.path.exists(log_file):
+        logger.info('Initialized fresh log file for pyautogui-tools-15 session')
+
     return logger
 
-# Instantiate early to ensure logs exist before app boot
-logger = setup_logger()
+# Singleton-ish instance for easy import throughout the project
+app_logger = setup_logger()
