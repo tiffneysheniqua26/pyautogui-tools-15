@@ -1,34 +1,39 @@
-import json
-import os
-from typing import Dict, Any
+import pyautogui
+import time
+import logging
 
-class ClickConfigHandler:
-    def __init__(self, filepath: str = "config.json"):
-        self.path = filepath
+class ClickHandler:
+    def __init__(self, interval: float = 0.1):
+        self.interval = interval
+        self.running = False
+        pyautogui.FAILSAFE = True
 
-    def serialize_profile(self, data: Dict[str, Any]) -> None:
+    def toggle_state(self, status: bool):
+        self.running = status
+
+    def execute_sequence(self, x: int, y: int, clicks: int):
         try:
-            with open(self.path, "w") as f:
-                json.dump(data, f, indent=4, sort_keys=True)
-        except (IOError, TypeError) as e:
-            print(f"Serialization failed: {e}")
+            if self.running:
+                pyautogui.click(x=x, y=y, clicks=clicks, interval=self.interval)
+        except pyautogui.FailSafeException:
+            self.running = False
+            logging.warning('Failsafe triggered, stopping execution')
 
-    def deserialize_profile(self) -> Dict[str, Any]:
-        if not os.path.exists(self.path):
-            return {"interval": 0.1, "button": "left", "repeats": 0}
-        try:
-            with open(self.path, "r") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            return {}
+    def safe_move(self, x: int, y: int):
+        """Warp mouse movement with sanity checks"""
+        if 0 <= x <= 1920 and 0 <= y <= 1080:
+            pyautogui.moveTo(x, y, duration=0.05)
 
-def validate_bounds(coords: tuple) -> bool:
-    x, y = coords
-    return isinstance(x, (int, float)) and isinstance(y, (int, float))
+    def batch_process(self, points: list):
+        """Process queue of coordinates"""
+        for p in points:
+            if not self.running:
+                break
+            self.safe_move(p[0], p[1])
+            self.execute_sequence(p[0], p[1], 1)
+            time.sleep(self.interval)
 
-def pack_payload(x: int, y: int, delay: float) -> bytes:
-    return f"{x}:{y}:{delay}".encode("utf-8")
-
-def unpack_payload(payload: bytes) -> dict:
-    parts = payload.decode("utf-8").split(":")
-    return {"x": int(parts[0]), "y": int(parts[1]), "delay": float(parts[2])}
+if __name__ == '__main__':
+    h = ClickHandler()
+    h.toggle_state(True)
+    h.batch_process([(100, 100), (200, 200)])
