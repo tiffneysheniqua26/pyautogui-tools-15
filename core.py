@@ -1,35 +1,44 @@
-import pyautogui
-import time
-from typing import Tuple, Optional
+import json
+import os
+from typing import Any, Dict
 
-def execute_click(coords: Tuple[int, int], interval: float = 0.1) -> None:
-    """Perform a targeted mouse click sequence at specified screen coordinates."""
-    pyautogui.moveTo(coords[0], coords[1])
-    pyautogui.click()
-    time.sleep(interval)
+DEFAULT_CONFIG = {
+    "interval": 0.1,
+    "button": "left",
+    "safety_stop": True,
+    "max_clicks": 1000
+}
 
-def pulse_automation(duration: int, speed: float) -> None:
-    """Run a high-frequency clicking loop based on a provided temporal pulse."""
-    end_time: float = time.time() + duration
-    while time.time() < end_time:
-        pyautogui.click()
-        time.sleep(speed)
+class ConfigManager:
+    def __init__(self, path: str = "config.json"):
+        self.path = path
+        self.settings = DEFAULT_CONFIG.copy()
+        self._load()
 
-def get_safety_bounds() -> Tuple[int, int]:
-    """Retrieve the current display resolution boundaries for coordinate validation."""
-    return pyautogui.size()
+    def _load(self) -> None:
+        if os.path.exists(self.path):
+            try:
+                with open(self.path, "r") as f:
+                    loaded = json.load(f)
+                    self.settings.update(loaded)
+            except (json.JSONDecodeError, IOError):
+                self._save_defaults()
+        else:
+            self._save_defaults()
 
-def emergency_stop(key: str = 'esc') -> bool:
-    """Check for an abort signal to terminate ongoing automation routines."""
-    return pyautogui.is_pressed(key)
+    def _save_defaults(self) -> None:
+        try:
+            with open(self.path, "w") as f:
+                json.dump(DEFAULT_CONFIG, f, indent=4)
+        except IOError:
+            pass
 
-class ClickEngine:
-    """The central processing unit for hardware-simulated click operations."""
-    def __init__(self, sensitivity: float = 0.05) -> None:
-        self.sensitivity: float = sensitivity
+    def get(self, key: str, default: Any = None) -> Any:
+        return self.settings.get(key, default)
 
-    def run_burst(self, clicks: int) -> None:
-        """Execute a defined burst of rapid clicks with engine-level pacing."""
-        for _ in range(clicks):
-            pyautogui.click()
-            time.sleep(self.sensitivity)
+    def __getattr__(self, item: str) -> Any:
+        return self.settings.get(item)
+
+if __name__ == "__main__":
+    cfg = ConfigManager()
+    print(f"Active interval: {cfg.interval}")
