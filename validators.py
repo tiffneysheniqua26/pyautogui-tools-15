@@ -1,35 +1,41 @@
-import json
-import os
-from typing import Dict, Any
+import functools
+import time
 
-DEFAULT_CONFIG = {
-    "interval": 0.1,
-    "button": "left",
-    "failsafe": True,
-    "hotkey": "f9"
-}
+class ClickOptimizer:
+    def __init__(self, cache_size=1024):
+        self._cache = {}
+        self._limit = cache_size
+        self._hits = 0
 
-def load_config(filepath: str = "config.json") -> Dict[str, Any]:
-    try:
-        if not os.path.exists(filepath):
-            with open(filepath, "w") as f:
-                json.dump(DEFAULT_CONFIG, f, indent=4)
-            return DEFAULT_CONFIG
-        
-        with open(filepath, "r") as f:
-            user_config = json.load(f)
+    def fast_throttle(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            key = (args, frozenset(kwargs.items()))
+            now = time.monotonic()
+            if key in self._cache and (now - self._cache[key][1]) < 0.01:
+                self._hits += 1
+                return self._cache[key][0]
             
-        return {**DEFAULT_CONFIG, **user_config}
-    except (IOError, json.JSONDecodeError):
-        return DEFAULT_CONFIG
+            result = func(*args, **kwargs)
+            
+            if len(self._cache) > self._limit:
+                self._cache.clear()
+            
+            self._cache[key] = (result, now)
+            return result
+        return wrapper
 
-def validate_interval(value: Any) -> float:
-    try:
-        interval = float(value)
-        return max(0.01, interval)
-    except (ValueError, TypeError):
-        return DEFAULT_CONFIG["interval"]
+optimizer = ClickOptimizer()
 
-def validate_button(value: Any) -> str:
-    allowed = ("left", "right", "middle")
-    return str(value).lower() if str(value).lower() in allowed else DEFAULT_CONFIG["button"]
+def validate_coordinate(func):
+    @optimizer.fast_throttle
+    @functools.wraps(func)
+    def checker(x, y):
+        if not (isinstance(x, (int, float)) and isinstance(y, (int, float))):
+            raise ValueError("coordinates must be numeric")
+        return func(x, y)
+    return checker
+
+@validate_coordinate
+def secure_click_coords(x, y):
+    return (float(x), float(y))
