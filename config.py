@@ -1,35 +1,70 @@
-import json
 import os
-from typing import Any, Dict
-
-DEFAULT_CONFIG = {
-    "interval": 0.01,
-    "button": "left",
-    "failsafe": True,
-    "hotkey": "f6"
-}
+import json
+import ast
+from typing import Any, get_type_hints
 
 class ConfigLoader:
-    def __init__(self, path: str = "settings.json"):
-        self.path = path
-        self.data = self._load()
+    """Creative autoclicker config loader using type hints for auto-coercion."""
+    
+    delay: float = 0.1
+    clicks: int = 100
+    button: str = 'left'
+    hotkey: str = 'f8'
+    coords: tuple = (100, 100)
+    
+    def __init__(self, filepath: str = "autoclick_config.json"):
+        self._filepath = filepath
+        self._data = {}
+        self.load()
 
-    def _load(self) -> Dict[str, Any]:
-        if not os.path.exists(self.path):
-            self._save(DEFAULT_CONFIG)
-            return DEFAULT_CONFIG
+    def load(self) -> None:
+        if not os.path.exists(self._filepath):
+            self._data = {
+                k: getattr(self, k) 
+                for k in get_type_hints(self).keys() 
+                if not k.startswith('_')
+            }
+            self.save()
+            return
+            
         try:
-            with open(self.path, "r") as f:
-                loaded = json.load(f)
-            return {**DEFAULT_CONFIG, **loaded}
+            with open(self._filepath, 'r') as f:
+                raw_data = json.load(f)
         except (json.JSONDecodeError, IOError):
-            return DEFAULT_CONFIG
+            raw_data = {}
+            
+        hints = get_type_hints(self)
+        for key, expected_type in hints.items():
+            if key.startswith('_'):
+                continue
+            val = raw_data.get(key, getattr(self.__class__, key))
+            
+            if isinstance(val, str) and expected_type is tuple:
+                try:
+                    val = ast.literal_eval(val)
+                except (ValueError, SyntaxError):
+                    val = getattr(self.__class__, key)
+                    
+            try:
+                self._data[key] = expected_type(val)
+            except (TypeError, ValueError):
+                self._data[key] = getattr(self.__class__, key)
 
-    def _save(self, data: Dict[str, Any]) -> None:
-        with open(self.path, "w") as f:
-            json.dump(data, f, indent=4)
+    def save(self) -> None:
+        try:
+            with open(self._filepath, 'w') as f:
+                json.dump(self._data, f, indent=4)
+        except IOError:
+            pass
 
-    def get(self, key: str) -> Any:
-        return self.data.get(key, DEFAULT_CONFIG.get(key))
+    def __getattr__(self, name: str) -> Any:
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"'ConfigLoader' object has no attribute '{name}'")
 
-settings = ConfigLoader()
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name.startswith('_'):
+            super().__setattr__(name, value)
+        else:
+            self._data[name] = value
+            self.save()
