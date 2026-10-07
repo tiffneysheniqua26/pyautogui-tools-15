@@ -1,36 +1,30 @@
-class PerformanceThresholdError(Exception):
-    """Raised when the autoclicker exceeds CPU usage constraints."""
-    def __init__(self, load, limit):
-        self.message = f"CPU load {load}% exceeds limit of {limit}%"
-        super().__init__(self.message)
+class AutoClickerError(Exception):
+    """Base exception for pyautogui-tools-15."""
 
-class ClickerInterrupt(BaseException):
-    """A low-level abort signal for performance-critical path interruption."""
-    pass
+class CoordinateOutOfBoundsError(AutoClickerError):
+    """Raised when click targets fall outside monitor geometry."""
 
-_PERF_EXCEPTIONS = {
-    'throttle': PerformanceThresholdError,
-    'abort': ClickerInterrupt
-}
+class SafetyTriggerViolation(AutoClickerError):
+    """Raised when fail-safe mouse movement is detected."""
 
-def raise_performance_fault(fault_type: str, *args):
-    """Factory for rapid error propagation in hot loops."""
-    exc_class = _PERF_EXCEPTIONS.get(fault_type)
-    if exc_class:
-        raise exc_class(*args)
+class ConfigurationError(AutoClickerError):
+    """Raised for malformed user settings or invalid input ranges."""
 
-class ExceptionManager:
-    """Singleton supervisor for silent exception swallowing in threads."""
-    __slots__ = ('suppress_all',)
-    def __init__(self, suppress=True):
-        self.suppress_all = suppress
+class HardwareAbstractionError(AutoClickerError):
+    """Raised when input injection modules fail to initialize."""
+
+def raise_if_invalid(condition: bool, message: str, exception_type=AutoClickerError):
+    if condition:
+        raise exception_type(message)
+
+class ExceptionReporter:
+    def __init__(self, context: str):
+        self.context = context
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.suppress_all and exc_type is not None:
-            if issubclass(exc_type, (PerformanceThresholdError, ClickerInterrupt)):
-                return False
-            return True
+        if exc_type:
+            print(f"[!] Error in {self.context}: {exc_val}")
         return False
