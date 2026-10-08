@@ -1,37 +1,52 @@
-import json
-import os
-from typing import Any, Dict
+from typing import List, Tuple, Union
 
-def serialize_click_data(data: Dict[str, Any], filepath: str) -> bool:
-    """serializes autoclicker configurations using a memory-efficient atomic write strategy"""
-    temp_path = f"{filepath}.tmp"
-    try:
-        with open(temp_path, 'w') as f:
-            json.dump(data, f, indent=4, sort_keys=True)
-        os.replace(temp_path, filepath)
-        return True
-    except (IOError, OSError, TypeError):
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        return False
+class Click:
+    def __init__(self, x: int, y: int, clicks: int = 1, delay: float = 0.1):
+        self.x = int(x)
+        self.y = int(y)
+        self.clicks = int(clicks)
+        self.delay = float(delay)
 
-def deserialize_click_data(filepath: str) -> Dict[str, Any]:
-    """loads click configuration with a graceful fallback to an empty profile""
-    if not os.path.exists(filepath):
-        return {"interval": 0.1, "button": "left", "clicks": 1}
-    try:
-        with open(filepath, 'r') as f:
-            return json.load(f)
-    except json.JSONDecodeError:
-        return {"error": "corrupted_config"}
+    def __matmul__(self, clicks: int) -> 'Click':
+        """Specifies click count using @ operator."""
+        return Click(self.x, self.y, clicks, self.delay)
 
-class ClickProfile:
-    """container for autoclicker settings with magic attribute access"""
-    def __init__(self, data: Dict[str, Any]):
-        self.__dict__.update(data)
-    
-    def __repr__(self) -> str:
-        return f"ClickProfile({self.__dict__})"
+    def __truediv__(self, delay: Union[int, float]) -> 'Click':
+        """Specifies post-click delay using / operator."""
+        return Click(self.x, self.y, self.clicks, float(delay))
 
-def create_profile(data: Dict[str, Any]) -> ClickProfile:
-    return ClickProfile(data)
+    def __or__(self, other: Union['Click', 'ClickSequence']) -> 'ClickSequence':
+        """Chains multiple click steps together using | operator."""
+        if isinstance(other, Click):
+            return ClickSequence([self, other])
+        elif isinstance(other, ClickSequence):
+            return ClickSequence([self] + other.steps)
+        raise TypeError("Chaining is only supported between Click and ClickSequence objects")
+
+    def to_tuple(self) -> Tuple[int, int, int, float]:
+        return (self.x, self.y, self.clicks, self.delay)
+
+
+class ClickSequence:
+    def __init__(self, steps: List[Click] = None):
+        self.steps = steps or []
+
+    def __or__(self, other: Union[Click, 'ClickSequence']) -> 'ClickSequence':
+        if isinstance(other, Click):
+            return ClickSequence(self.steps + [other])
+        elif isinstance(other, ClickSequence):
+            return ClickSequence(self.steps + other.steps)
+        raise TypeError("Chaining is only supported between Click and ClickSequence objects")
+
+    def __iter__(self):
+        for step in self.steps:
+            yield step.to_tuple()
+
+    def serialize(self) -> str:
+        """Serializes the click sequence to a compact string format."""
+        return ";".join(f"{s.x},{s.y},{s.clicks},{s.delay}" for s in self.steps)
+
+    @classmethod
+    def deserialize(cls, serialized_data: str) -> 'ClickSequence':
+        """Reconstructs ClickSequence from serialized string data."""
+        if not serialized_data
