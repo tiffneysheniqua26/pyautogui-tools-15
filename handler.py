@@ -1,39 +1,36 @@
 import pyautogui
 import time
-import logging
+import threading
+from queue import Queue
 
 class ClickHandler:
-    def __init__(self, interval: float = 0.1):
+    def __init__(self, interval=0.01):
         self.interval = interval
-        self.running = False
-        pyautogui.FAILSAFE = True
+        self.click_queue = Queue()
+        self.active = False
 
-    def toggle_state(self, status: bool):
-        self.running = status
-
-    def execute_sequence(self, x: int, y: int, clicks: int):
-        try:
-            if self.running:
-                pyautogui.click(x=x, y=y, clicks=clicks, interval=self.interval)
-        except pyautogui.FailSafeException:
-            self.running = False
-            logging.warning('Failsafe triggered, stopping execution')
-
-    def safe_move(self, x: int, y: int):
-        """Warp mouse movement with sanity checks"""
-        if 0 <= x <= 1920 and 0 <= y <= 1080:
-            pyautogui.moveTo(x, y, duration=0.05)
-
-    def batch_process(self, points: list):
-        """Process queue of coordinates"""
-        for p in points:
-            if not self.running:
-                break
-            self.safe_move(p[0], p[1])
-            self.execute_sequence(p[0], p[1], 1)
+    def _execute_batch(self):
+        while self.active:
+            if not self.click_queue.empty():
+                coords = self.click_queue.get()
+                pyautogui.click(x=coords[0], y=coords[1])
             time.sleep(self.interval)
 
-if __name__ == '__main__':
-    h = ClickHandler()
-    h.toggle_state(True)
-    h.batch_process([(100, 100), (200, 200)])
+    def start_optimized_stream(self):
+        self.active = True
+        self.thread = threading.Thread(target=self._execute_batch, daemon=True)
+        self.thread.start()
+
+    def schedule_click(self, x, y):
+        if self.click_queue.qsize() < 100:
+            self.click_queue.put((x, y))
+
+    def stop(self):
+        self.active = False
+        if hasattr(self, 'thread'):
+            self.thread.join()
+
+def get_performance_optimized_handler():
+    # Using a singleton-like factory to ensure low-latency thread management
+    handler = ClickHandler()
+    return handler
