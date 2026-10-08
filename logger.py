@@ -1,35 +1,53 @@
-import logging
-from logging.handlers import RotatingFileHandler
+import json
 import os
+import time
+from typing import Generator, Tuple
 
-def get_logger(name='pyautogui-tools', log_file='autoclicker.log'):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+class DeltaClickLogger:
+    """Coroutine-based click logger storing coordinates as relative deltas."""
+    def __init__(self, filepath: str = "click_history.json", flush_interval: int = 10):
+        self.filepath = filepath
+        self.flush_interval = flush_interval
+        self.buffer = []
+        self._logger_coro = self._init_logger()
+        next(self._logger_coro)
 
-    if not logger.handlers:
-        # Ensure log directory exists, even if path is relative
-        os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
+    def _init_logger(self) -> Generator[None, Tuple[int, int], None]:
+        last_x, last_y = 0, 0
+        last_time = time.time()
+        while True:
+            x, y = yield
+            current_time = time.time()
+            dx = x - last_x
+            dy = y - last_y
+            dt = round(current_time - last_time, 4)
+            self.buffer.append({"dx": dx, "dy": dy, "dt": dt})
+            last_x, last_y = x, y
+            last_time = current_time
+            if len(self.buffer) >= self.flush_interval:
+                self.flush()
 
-        # Rotating file handler: 5 files of 1MB each
-        handler = RotatingFileHandler(
-            log_file, 
-            maxBytes=1_048_576, 
-            backupCount=5
-        )
-        
-        formatter = logging.Formatter(
-            '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
-        )
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
+    def log(self, x: int, y: int) -> None:
+        try:
+            self._logger_coro.send((x, y))
+        except StopIteration:
+            pass
 
-        # Also output to stdout for real-time monitoring
-        console = logging.StreamHandler()
-        console.setFormatter(formatter)
-        logger.addHandler(console)
+    def flush(self) -> None:
+        if not self.buffer:
+            return
+        existing_data = []
+        if os.path.exists(self.filepath):
+            try:
+                with open(self.filepath, "r") as f:
+                    existing_data = json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError):
+                existing_data = []
+        existing_data.extend(self.buffer)
+        with open(self.filepath, "w") as f:
+            json.dump(existing_data, f, indent=2)
+        self.buffer.clear()
 
-    return logger
-
-# Instantiate for quick access across package
-log = get_logger()
+    def close(self) -> None:
+        self.flush()
+        self._logger_coro.close()
