@@ -1,30 +1,39 @@
-class AutoClickerError(Exception):
-    """Base exception for pyautogui-tools-15."""
+import functools
+import time
 
-class CoordinateOutOfBoundsError(AutoClickerError):
-    """Raised when click targets fall outside monitor geometry."""
+class ClickerPerformanceError(Exception):
+    """Base exception for high-frequency processing failures."""
+    pass
 
-class SafetyTriggerViolation(AutoClickerError):
-    """Raised when fail-safe mouse movement is detected."""
+class LatencyThresholdExceeded(ClickerPerformanceError):
+    """Raised when the click loop exceeds CPU budget."""
+    pass
 
-class ConfigurationError(AutoClickerError):
-    """Raised for malformed user settings or invalid input ranges."""
+def fast_fail_guard(max_latency=0.001):
+    """Decorator for pinning performance metrics to high-speed loops."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            start = time.perf_counter()
+            result = func(*args, **kwargs)
+            duration = time.perf_counter() - start
+            if duration > max_latency:
+                raise LatencyThresholdExceeded(f"Loop latency {duration:.6f}s exceeded")
+            return result
+        return wrapper
+    return decorator
 
-class HardwareAbstractionError(AutoClickerError):
-    """Raised when input injection modules fail to initialize."""
+class ExceptionThrottle:
+    """Suppress exception flooding in high-frequency event polling."""
+    def __init__(self, limit=10):
+        self.limit = limit
+        self.count = 0
+        self.last_reset = time.monotonic()
 
-def raise_if_invalid(condition: bool, message: str, exception_type=AutoClickerError):
-    if condition:
-        raise exception_type(message)
-
-class ExceptionReporter:
-    def __init__(self, context: str):
-        self.context = context
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if exc_type:
-            print(f"[!] Error in {self.context}: {exc_val}")
-        return False
+    def should_suppress(self):
+        now = time.monotonic()
+        if now - self.last_reset > 1.0:
+            self.count = 0
+            self.last_reset = now
+        self.count += 1
+        return self.count > self.limit
