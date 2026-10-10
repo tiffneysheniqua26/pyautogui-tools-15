@@ -1,70 +1,66 @@
-import os
 import json
-import ast
-from typing import Any, get_type_hints
+import os
+from collections import ChainMap
+from pathlib import Path
+from typing import Any, Dict, Union
 
-class ConfigLoader:
-    """Creative autoclicker config loader using type hints for auto-coercion."""
-    
-    delay: float = 0.1
-    clicks: int = 100
-    button: str = 'left'
-    hotkey: str = 'f8'
-    coords: tuple = (100, 100)
-    
-    def __init__(self, filepath: str = "autoclick_config.json"):
-        self._filepath = filepath
-        self._data = {}
-        self.load()
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "click_interval": 0.1,
+    "button": "left",
+    "clicks_per_burst": 1,
+    "jitter_px": 2,
+    "hotkey_toggle": "f8",
+    "target_region": None,
+    "stop_after_clicks": 0,
+    "sound_feedback": False,
+}
 
-    def load(self) -> None:
-        if not os.path.exists(self._filepath):
-            self._data = {
-                k: getattr(self, k) 
-                for k in get_type_hints(self).keys() 
-                if not k.startswith('_')
-            }
-            self.save()
-            return
-            
-        try:
-            with open(self._filepath, 'r') as f:
-                raw_data = json.load(f)
-        except (json.JSONDecodeError, IOError):
-            raw_data = {}
-            
-        hints = get_type_hints(self)
-        for key, expected_type in hints.items():
-            if key.startswith('_'):
-                continue
-            val = raw_data.get(key, getattr(self.__class__, key))
-            
-            if isinstance(val, str) and expected_type is tuple:
+class AutoClickerConfig:
+    """Cascade-loaded configuration with layer-based fallback mechanisms."""
+
+    def __init__(self, config_file: Union[str, Path] = "autoclicker_config.json"):
+        self.config_file = Path(config_file)
+        self._env_prefix = "AUTOCLICK_"
+        self._layers = ChainMap({}, {}, DEFAULT_CONFIG)
+        self.reload()
+
+    def _load_env_overrides(self) -> Dict[str, Any]:
+        overrides = {}
+        for key in DEFAULT_CONFIG:
+            env_var = f"{self._env_prefix}{key.upper()}"
+            if env_var in os.environ:
+                val = os.environ[env_var]
                 try:
-                    val = ast.literal_eval(val)
-                except (ValueError, SyntaxError):
-                    val = getattr(self.__class__, key)
-                    
+                    overrides[key] = json.loads(val)
+                except json.JSONDecodeError:
+                    overrides[key] = val
+        return overrides
+
+    def _load_file_config(self) -> Dict[str, Any]:
+        if self.config_file.is_file():
             try:
-                self._data[key] = expected_type(val)
-            except (TypeError, ValueError):
-                self._data[key] = getattr(self.__class__, key)
+                with open(self.config_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError):
+                return {}
+        return {}
 
-    def save(self) -> None:
-        try:
-            with open(self._filepath, 'w') as f:
-                json.dump(self._data, f, indent=4)
-        except IOError:
-            pass
+    def reload(self) -> None:
+        file_data = self._load_file_config()
+        env_data = self._load_env_overrides()
+        self._layers.maps[0] = env_data
+        self._layers.maps[1] = file_data
 
-    def __getattr__(self, name: str) -> Any:
-        if name in self._data:
-            return self._data[name]
-        raise AttributeError(f"'ConfigLoader' object has no attribute '{name}'")
+    def __getattr__(self, item: str) -> Any:
+        if item in self._layers:
+            return self._layers[item]
+        raise AttributeError(f"Configuration key '{item}' not found")
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name.startswith('_'):
-            super().__setattr__(name, value)
-        else:
-            self._data[name] = value
-            self.save()
+    def __getitem__(self, item: str) -> Any:
+        return self._layers[item]
+
+    def as_dict(self) -> Dict[str, Any]:
+        return dict(self._layers)
+
+
+default_config = AutoClickerConfig()
