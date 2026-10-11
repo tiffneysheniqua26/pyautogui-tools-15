@@ -1,36 +1,34 @@
 import pyautogui
 import time
-import threading
-from queue import Queue
+import logging
+from typing import Tuple
 
 class ClickHandler:
-    def __init__(self, interval=0.01):
+    def __init__(self, interval: float = 0.1):
         self.interval = interval
-        self.click_queue = Queue()
-        self.active = False
+        self.is_active = False
+        logging.basicConfig(level=logging.INFO)
 
-    def _execute_batch(self):
-        while self.active:
-            if not self.click_queue.empty():
-                coords = self.click_queue.get()
-                pyautogui.click(x=coords[0], y=coords[1])
+    def toggle_state(self) -> None:
+        self.is_active = not self.is_active
+        logging.info(f"Handler state: {'Active' if self.is_active else 'Idle'}")
+
+    def execute_click(self, coords: Tuple[int, int]) -> None:
+        if self.is_active:
+            pyautogui.click(x=coords[0], y=coords[1])
             time.sleep(self.interval)
 
-    def start_optimized_stream(self):
-        self.active = True
-        self.thread = threading.Thread(target=self._execute_batch, daemon=True)
-        self.thread.start()
+    def emergency_stop(self) -> None:
+        self.is_active = False
+        pyautogui.FAILSAFE = True
 
-    def schedule_click(self, x, y):
-        if self.click_queue.qsize() < 100:
-            self.click_queue.put((x, y))
-
-    def stop(self):
-        self.active = False
-        if hasattr(self, 'thread'):
-            self.thread.join()
-
-def get_performance_optimized_handler():
-    # Using a singleton-like factory to ensure low-latency thread management
-    handler = ClickHandler()
-    return handler
+    def run_sequence(self, path: list[Tuple[int, int]]) -> None:
+        """Executes a sequential click pattern until interrupted."""
+        try:
+            while self.is_active:
+                for pos in path:
+                    if not self.is_active: break
+                    self.execute_click(pos)
+        except pyautogui.FailSafeException:
+            self.emergency_stop()
+            logging.warning("Failsafe triggered, stopping sequence")
