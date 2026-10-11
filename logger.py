@@ -1,53 +1,65 @@
-import json
-import os
-import time
-from typing import Generator, Tuple
+import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-class DeltaClickLogger:
-    """Coroutine-based click logger storing coordinates as relative deltas."""
-    def __init__(self, filepath: str = "click_history.json", flush_interval: int = 10):
-        self.filepath = filepath
-        self.flush_interval = flush_interval
-        self.buffer = []
-        self._logger_coro = self._init_logger()
-        next(self._logger_coro)
 
-    def _init_logger(self) -> Generator[None, Tuple[int, int], None]:
-        last_x, last_y = 0, 0
-        last_time = time.time()
-        while True:
-            x, y = yield
-            current_time = time.time()
-            dx = x - last_x
-            dy = y - last_y
-            dt = round(current_time - last_time, 4)
-            self.buffer.append({"dx": dx, "dy": dy, "dt": dt})
-            last_x, last_y = x, y
-            last_time = current_time
-            if len(self.buffer) >= self.flush_interval:
-                self.flush()
+class ClickLogFormatter(logging.Formatter):
+    """Custom log formatter with status symbols for click automation events."""
 
-    def log(self, x: int, y: int) -> None:
-        try:
-            self._logger_coro.send((x, y))
-        except StopIteration:
-            pass
+    SYMBOLS = {
+        logging.DEBUG: "[DEBUG]",
+        logging.INFO: "[CLICK]",
+        logging.WARNING: "[WARN] ",
+        logging.ERROR: "[FAIL] ",
+        logging.CRITICAL: "[CRIT] ",
+    }
 
-    def flush(self) -> None:
-        if not self.buffer:
-            return
-        existing_data = []
-        if os.path.exists(self.filepath):
-            try:
-                with open(self.filepath, "r") as f:
-                    existing_data = json.load(f)
-            except (json.JSONDecodeError, FileNotFoundError):
-                existing_data = []
-        existing_data.extend(self.buffer)
-        with open(self.filepath, "w") as f:
-            json.dump(existing_data, f, indent=2)
-        self.buffer.clear()
+    def format(self, record: logging.LogRecord) -> str:
+        symbol = self.SYMBOLS.get(record.levelno, "[LOG]  ")
+        record.symbol = symbol
+        return super().format(record)
 
-    def close(self) -> None:
-        self.flush()
-        self._logger_coro.close()
+
+def setup_autoclick_logger(
+    log_dir: str = "logs",
+    log_filename: str = "autoclicker.log",
+    max_bytes: int = 512 * 1024,
+    backup_count: int = 3,
+    level: int = logging.INFO,
+) -> logging.Logger:
+    """Configures and returns a rotating logger setup for click actions."""
+    target_dir = Path(log_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    file_path = target_dir / log_filename
+
+    logger = logging.getLogger("pyautogui_tools.autoclicker")
+    logger.setLevel(level)
+
+    if logger.handlers:
+        return logger
+
+    file_handler = RotatingFileHandler(
+        file_path,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding="utf-8",
+    )
+
+    fmt = "%(asctime)s %(symbol)s - %(message)s"
+    date_fmt = "%H:%M:%S"
+    formatter = ClickLogFormatter(fmt=fmt, datefmt=date_fmt)
+    file_handler.setFormatter(formatter)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+
+    logger.info("rotating logger system initialized")
+    return logger
+
+
+def log_click_action(logger: logging.Logger, x: int, y: int, button: str, cps: float) -> None:
+    """Helper to record automated coordinate clicks with performance statistics."""
+    logger.info(f"Pos: ({x}, {y}) | Key: {button} | Rate: {cps:.1f} CPS")
