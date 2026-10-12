@@ -1,39 +1,25 @@
-import functools
-import time
+from typing import Optional, Any
 
-class ClickerPerformanceError(Exception):
-    """Base exception for high-frequency processing failures."""
+class PyAutoGUIError(Exception):
+    """Base exception class for all custom tool errors."""
+    def __init__(self, message: str, context: Optional[Any] = None) -> None:
+        super().__init__(message)
+        self.context = context
+
+class ClickerInterrupt(PyAutoGUIError):
+    """Exception raised when user triggers a manual stop."""
     pass
 
-class LatencyThresholdExceeded(ClickerPerformanceError):
-    """Raised when the click loop exceeds CPU budget."""
+class HardwareAbstractionError(PyAutoGUIError):
+    """Exception raised when mouse control fails at OS level."""
     pass
 
-def fast_fail_guard(max_latency=0.001):
-    """Decorator for pinning performance metrics to high-speed loops."""
-    def decorator(func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            start = time.perf_counter()
-            result = func(*args, **kwargs)
-            duration = time.perf_counter() - start
-            if duration > max_latency:
-                raise LatencyThresholdExceeded(f"Loop latency {duration:.6f}s exceeded")
-            return result
-        return wrapper
-    return decorator
+class ConfigurationIntegrityError(PyAutoGUIError):
+    """Exception raised for invalid YAML or environment setups."""
+    pass
 
-class ExceptionThrottle:
-    """Suppress exception flooding in high-frequency event polling."""
-    def __init__(self, limit=10):
-        self.limit = limit
-        self.count = 0
-        self.last_reset = time.monotonic()
+def raise_with_context(exception_type: type[PyAutoGUIError], msg: str, ctx: Any = None) -> None:
+    """Helper to cast and raise specific error types with debug data."""
+    raise exception_type(msg, context=ctx)
 
-    def should_suppress(self):
-        now = time.monotonic()
-        if now - self.last_reset > 1.0:
-            self.count = 0
-            self.last_reset = now
-        self.count += 1
-        return self.count > self.limit
+# The spirit of the code: Fail loudly, fail clearly, fail with style.
