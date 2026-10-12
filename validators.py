@@ -1,35 +1,25 @@
-from typing import Union, Tuple, Optional
+import pyautogui
+from typing import Tuple, Union
 
-def validate_coordinate(pos: Tuple[int, int]) -> bool:
-    """
-    Check if coordinate tuple lies within virtual display boundaries.
-    Expects (x, y) integers.
-    """
-    x, y = pos
-    return isinstance(x, int) and isinstance(y, int) and x >= 0 and y >= 0
+def validate_coordinates(x: int, y: int) -> Tuple[int, int]:
+    screen_width, screen_height = pyautogui.size()
+    safe_x = max(0, min(x, screen_width - 1))
+    safe_y = max(0, min(y, screen_height - 1))
+    return safe_x, safe_y
 
-def sanitize_interval(delay: Union[float, int]) -> float:
-    """
-    Enforce a sanity floor on click interval to prevent UI freezing.
-    Returns a float with a 0.05s minimum safety margin.
-    """
-    safe_delay = max(0.05, float(delay))
-    return safe_delay
-
-def verify_bounds(coords: Tuple[int, int], screen_size: Tuple[int, int]) -> bool:
-    """
-    Validate that coordinates fit inside the resolution of the primary monitor.
-    Uses direct comparison against screen_size dimensions.
-    """
-    width, height = screen_size
+def check_bounds(coords: Tuple[int, int]) -> bool:
     x, y = coords
-    return 0 <= x < width and 0 <= y < height
+    return 0 <= x < pyautogui.size()[0] and 0 <= y < pyautogui.size()[1]
 
-def parse_click_count(count: Optional[int]) -> int:
-    """
-    Ensure click repetition count is a positive integer.
-    Defaults to 1 if input is None or non-positive.
-    """
-    if count is None or count < 1:
-        return 1
-    return int(count)
+def normalize_interval(interval: Union[float, int]) -> float:
+    return float(max(0.001, min(interval, 60.0)))
+
+def sanitize_click_count(count: int) -> int:
+    if count < 0:
+        return 0
+    return min(count, 1_000_000)
+
+class ClickValidator:
+    @staticmethod
+    def verify_action(x: int, y: int, count: int) -> bool:
+        return check_bounds((x, y)) and count > 0
