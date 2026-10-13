@@ -1,34 +1,30 @@
 import pyautogui
 import time
-import logging
+import random
 from typing import Tuple
 
-class ClickHandler:
-    def __init__(self, interval: float = 0.1):
-        self.interval = interval
-        self.is_active = False
-        logging.basicConfig(level=logging.INFO)
+def jitter_click(x: int, y: int, intensity: int = 2) -> None:
+    pyautogui.moveTo(x + random.randint(-intensity, intensity), y + random.randint(-intensity, intensity))
+    pyautogui.click()
 
-    def toggle_state(self) -> None:
-        self.is_active = not self.is_active
-        logging.info(f"Handler state: {'Active' if self.is_active else 'Idle'}")
+def safe_sequence(coords: list[Tuple[int, int]], delay: float = 0.5) -> None:
+    for x, y in coords:
+        pyautogui.moveTo(x, y, duration=0.2)
+        pyautogui.click()
+        time.sleep(delay)
 
-    def execute_click(self, coords: Tuple[int, int]) -> None:
-        if self.is_active:
-            pyautogui.click(x=coords[0], y=coords[1])
-            time.sleep(self.interval)
+def hold_key_pattern(key: str, interval: float, duration: int) -> None:
+    end_time = time.time() + duration
+    while time.time() < end_time:
+        pyautogui.press(key)
+        time.sleep(interval)
 
-    def emergency_stop(self) -> None:
-        self.is_active = False
-        pyautogui.FAILSAFE = True
+def screen_search(image_path: str, confidence: float = 0.8) -> Tuple[int, int]:
+    location = pyautogui.locateOnScreen(image_path, confidence=confidence)
+    if location:
+        return pyautogui.center(location)
+    return (-1, -1)
 
-    def run_sequence(self, path: list[Tuple[int, int]]) -> None:
-        """Executes a sequential click pattern until interrupted."""
-        try:
-            while self.is_active:
-                for pos in path:
-                    if not self.is_active: break
-                    self.execute_click(pos)
-        except pyautogui.FailSafeException:
-            self.emergency_stop()
-            logging.warning("Failsafe triggered, stopping sequence")
+def emergency_stop() -> None:
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE = 0.1
