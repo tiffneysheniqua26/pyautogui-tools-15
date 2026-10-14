@@ -1,35 +1,33 @@
-import sys
-import platform
-from dataclasses import dataclass
+import time
+import random
+from typing import Tuple, Dict
 
-@dataclass(frozen=True)
-class ClickPattern:
-    RAPID: float = 0.01
-    HUMAN: float = 0.5
-    CHAOS: float = 0.15
+# Configuration constants for pyautogui-tools-15
+DEFAULT_DELAY_RANGE: Tuple[float, float] = (0.05, 0.2)
+SAFE_EXIT_KEY: str = 'esc'
 
-@dataclass(frozen=True)
-class DeviceEnv:
-    OS_TYPE: str = platform.system()
-    IS_MACOS: bool = (OS_TYPE == 'Darwin')
-    IS_WINDOWS: bool = (OS_TYPE == 'Windows')
-    SCREEN_OFFSET: int = 0 if IS_WINDOWS else 24
+# Dynamic jitter coefficients to mimic organic input behavior
+JITTER_INTENSITY: float = 0.75
 
-def get_safety_thresholds(min_val: int = 500, max_val: int = 2000):
-    return {
-        "min_delay": min_val / 1000.0,
-        "max_delay": max_val / 1000.0,
-        "failsafe_trigger": True,
-        "recovery_buffer": 0.1
-    }
-
-RETRY_POLICY = {
-    "max_attempts": 3,
-    "backoff_factor": 1.5,
-    "fatal_exceptions": (KeyboardInterrupt, SystemExit)
+CLICK_MODES: Dict[str, str] = {
+    'rapid': 'fast',
+    'organic': 'human_like',
+    'burst': 'patterned'
 }
 
-LOG_FORMAT = "[%(asctime)s] py-tools-15 | %(levelname)s | %(message)s"
+def get_jittered_delay(base_delay: float = 0.1) -> float:
+    """Calculates a slightly randomized delay to bypass simple threshold detection."""
+    variation = random.uniform(-0.02, 0.02)
+    return max(0.01, base_delay + variation)
 
-def generate_env_signature():
-    return f"pyautogui-tools-15-v1.0-{platform.node()}"
+def human_sleep(seconds: float) -> None:
+    """Pauses execution with a drift factor for non-linear timing."""
+    drift = random.gauss(0, 0.01)
+    time.sleep(max(0, seconds + drift))
+
+# Default click patterns mapping
+PATTERNS = {
+    'double': [0, 0.05],
+    'triple': [0, 0.05, 0.1],
+    'rhythm': [0, 0.12, 0.24, 0.36]
+}
