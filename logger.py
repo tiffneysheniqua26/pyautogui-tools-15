@@ -1,35 +1,34 @@
 import logging
-from logging.handlers import RotatingFileHandler
-import os
+import functools
 
-def setup_logger(name: str = 'pyautogui-tools-15', log_dir: str = 'logs') -> logging.Logger:
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
+# Configure logger for pyautogui-tools-15
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - [pyautogui-tools-15] - %(levelname)s - %(message)s')
+logger = logging.getLogger('autoclicker_core')
 
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
+def validate_input(func):
+    """Decorator that casts inputs to positive floats and sanity-checks intervals"""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        cleaned_args = []
+        for arg in args:
+            try:
+                val = float(arg)
+                if val < 0.001:
+                    logger.warning(f'Input {val} too low, clamping to 0.001')
+                    val = 0.001
+                cleaned_args.append(val)
+            except (ValueError, TypeError):
+                logger.error(f'Invalid input detected: {arg}, defaulting to 1.0')
+                cleaned_args.append(1.0)
+        return func(*cleaned_args, **kwargs)
+    return wrapper
 
-    formatter = logging.Formatter(
-        '[%(asctime)s] %(levelname)-8s | %(name)s | %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-    log_file = os.path.join(log_dir, f'{name}.log')
-
-    file_handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=1024 * 1024 * 5, 
-        backupCount=3
-    )
-    file_handler.setFormatter(formatter)
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    if not logger.handlers:
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
-
-    return logger
-
-log = setup_logger()
+@validate_input
+def safe_click_loop(interval, duration):
+    """Simulated clicking process with validated execution parameters"""
+    logger.info(f'Starting clicker at {interval}s interval for {duration}s')
+    import time
+    start = time.time()
+    while time.time() - start < duration:
+        time.sleep(interval)
+        logger.info('Click event emitted successfully')
