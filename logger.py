@@ -1,34 +1,29 @@
 import logging
-import functools
+from logging.handlers import RotatingFileHandler
+import os
 
-# Configure logger for pyautogui-tools-15
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - [pyautogui-tools-15] - %(levelname)s - %(message)s')
-logger = logging.getLogger('autoclicker_core')
+def setup_logger(name='pyautogui-tools-15', log_file='autoclicker.log'):
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    
+    # Rotation logic: 2MB per file, keep 3 backups
+    file_handler = RotatingFileHandler(
+        log_file, 
+        maxBytes=2*1024*1024, 
+        backupCount=3
+    )
+    file_handler.setFormatter(formatter)
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    
+    if not logger.handlers:
+        logger.addHandler(file_handler)
+        logger.addHandler(console_handler)
+    
+    return logger
 
-def validate_input(func):
-    """Decorator that casts inputs to positive floats and sanity-checks intervals"""
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        cleaned_args = []
-        for arg in args:
-            try:
-                val = float(arg)
-                if val < 0.001:
-                    logger.warning(f'Input {val} too low, clamping to 0.001')
-                    val = 0.001
-                cleaned_args.append(val)
-            except (ValueError, TypeError):
-                logger.error(f'Invalid input detected: {arg}, defaulting to 1.0')
-                cleaned_args.append(1.0)
-        return func(*cleaned_args, **kwargs)
-    return wrapper
-
-@validate_input
-def safe_click_loop(interval, duration):
-    """Simulated clicking process with validated execution parameters"""
-    logger.info(f'Starting clicker at {interval}s interval for {duration}s')
-    import time
-    start = time.time()
-    while time.time() - start < duration:
-        time.sleep(interval)
-        logger.info('Click event emitted successfully')
+# Quick access factory instance
+clicker_logger = setup_logger()
