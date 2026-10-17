@@ -1,29 +1,35 @@
 import logging
-from logging.handlers import RotatingFileHandler
 import os
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-def setup_logger(name='pyautogui-tools-15', log_file='autoclicker.log'):
+def get_logger(name: str = "autoclicker") -> logging.Logger:
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "clicker.log"
+
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    
-    # Rotation logic: 2MB per file, keep 3 backups
-    file_handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=2*1024*1024, 
-        backupCount=3
-    )
-    file_handler.setFormatter(formatter)
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    
+
     if not logger.handlers:
+        formatter = logging.Formatter(
+            "%(asctime)s [%(levelname)s] (%(name)s) %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        )
+
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=1024 * 1024 * 5, backupCount=3
+        )
+        file_handler.setFormatter(formatter)
+
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
-    
+
     return logger
 
-# Quick access factory instance
-clicker_logger = setup_logger()
+if __name__ == "__main__":
+    log = get_logger()
+    log.info("logging system initialization success")
