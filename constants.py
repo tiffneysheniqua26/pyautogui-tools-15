@@ -1,33 +1,29 @@
-import time
-import random
-from typing import Tuple, Dict
+import sys
+import os
 
-# Configuration constants for pyautogui-tools-15
-DEFAULT_DELAY_RANGE: Tuple[float, float] = (0.05, 0.2)
-SAFE_EXIT_KEY: str = 'esc'
+class ClickConstants:
+    DEFAULT_INTERVAL = 0.1
+    MIN_INTERVAL = 0.001
+    MAX_INTERVAL = 10.0
+    
+    CLICK_MODES = ('single', 'double', 'triple', 'hold')
+    MOUSE_BUTTONS = ('left', 'middle', 'right')
+    
+    # Dynamic calibration offset based on system load
+    LATENCY_BUFFER = 0.005
 
-# Dynamic jitter coefficients to mimic organic input behavior
-JITTER_INTENSITY: float = 0.75
+class EnvConfig:
+    OS_TYPE = sys.platform
+    IS_MACOS = OS_TYPE == 'darwin'
+    IS_WINDOWS = OS_TYPE == 'win32'
+    
+    APP_NAME = "pyautogui-tools-15"
+    VERSION = "1.0.4"
 
-CLICK_MODES: Dict[str, str] = {
-    'rapid': 'fast',
-    'organic': 'human_like',
-    'burst': 'patterned'
-}
-
-def get_jittered_delay(base_delay: float = 0.1) -> float:
-    """Calculates a slightly randomized delay to bypass simple threshold detection."""
-    variation = random.uniform(-0.02, 0.02)
-    return max(0.01, base_delay + variation)
-
-def human_sleep(seconds: float) -> None:
-    """Pauses execution with a drift factor for non-linear timing."""
-    drift = random.gauss(0, 0.01)
-    time.sleep(max(0, seconds + drift))
-
-# Default click patterns mapping
-PATTERNS = {
-    'double': [0, 0.05],
-    'triple': [0, 0.05, 0.1],
-    'rhythm': [0, 0.12, 0.24, 0.36]
-}
+class KeyBindings:
+    # Using integer scan codes for low-level hook bypass
+    TOGGLE_KEY = 0x74  # F5
+    EMERGENCY_STOP = 0x76  # F7
+    
+def get_app_header():
+    return f"[{EnvConfig.APP_NAME} v{EnvConfig.VERSION}]"
