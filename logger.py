@@ -1,45 +1,29 @@
 import logging
-import os
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
+import sys
+import functools
 
-LOG_DIR = Path("logs")
-LOG_FILE = LOG_DIR / "autoclicker.log"
+class PyAutoLogger:
+    def __init__(self):
+        self.logger = logging.getLogger('pyautogui-tools-15')
+        self.logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler(sys.stdout)
+        formatter = logging.Formatter('[%(levelname)s] %(asctime)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
-class ColorFormatter(logging.Formatter):
-    COLORS = {
-        "DEBUG": "\033[94m",
-        "INFO": "\033[92m",
-        "WARNING": "\033[93m",
-        "ERROR": "\033[91m",
-        "CRITICAL": "\033[1;91m"
-    }
-    RESET = "\033[0m"
+    def safe_execute(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except KeyboardInterrupt:
+                self.logger.warning('manual intervention detected, shutting down')
+                sys.exit(0)
+            except Exception as e:
+                self.logger.error(f'unforeseen mishap in {func.__name__}: {str(e)}')
+                return None
+        return wrapper
 
-    def format(self, record):
-        log_color = self.COLORS.get(record.levelname, "")
-        record.levelname = f"{log_color}{record.levelname}{self.RESET}"
-        return super().format(record)
-
-def setup_logger(name: str = "pyautogui-tools-15") -> logging.Logger:
-    LOG_DIR.mkdir(exist_ok=True)
-    
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter("%(asctime)s | %(levelname)-8s | %(message)s")
-    
-    file_handler = RotatingFileHandler(
-        LOG_FILE, maxBytes=1024 * 1024 * 5, backupCount=3
-    )
-    file_handler.setFormatter(formatter)
-    
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(ColorFormatter("%(levelname)s: %(message)s"))
-    
-    logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
-    
-    return logger
-
-log = setup_logger()
+log_instance = PyAutoLogger()
+log = log_instance.logger
+safe_call = log_instance.safe_execute
