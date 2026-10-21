@@ -1,29 +1,30 @@
 import logging
 import sys
-import functools
+from typing import Optional
 
-class PyAutoLogger:
-    def __init__(self):
-        self.logger = logging.getLogger('pyautogui-tools-15')
+class ClickerLogger:
+    """Custom logger facade for pyautogui-tools-15 operations."""
+
+    def __init__(self, name: str = "autoclicker") -> None:
+        self.logger: logging.Logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
-        handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter('[%(levelname)s] %(asctime)s - %(message)s')
+        
+        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
+        formatter: logging.Formatter = logging.Formatter(
+            "[%(asctime)s] %(levelname)s | %(message)s", 
+            datefmt="%H:%M:%S"
+        )
         handler.setFormatter(formatter)
         self.logger.addHandler(handler)
 
-    def safe_execute(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except KeyboardInterrupt:
-                self.logger.warning('manual intervention detected, shutting down')
-                sys.exit(0)
-            except Exception as e:
-                self.logger.error(f'unforeseen mishap in {func.__name__}: {str(e)}')
-                return None
-        return wrapper
+    def log(self, message: str, level: str = "info") -> None:
+        """Dynamic dispatch logging to standard output."""
+        method = getattr(self.logger, level.lower(), self.logger.info)
+        method(message)
 
-log_instance = PyAutoLogger()
-log = log_instance.logger
-safe_call = log_instance.safe_execute
+    def critical_fail(self, reason: str) -> None:
+        """Abrupt termination helper for catastrophic events."""
+        self.logger.critical(f"CRASH_EVENT: {reason}")
+        sys.exit(1)
+
+logger: ClickerLogger = ClickerLogger()
