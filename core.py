@@ -1,36 +1,36 @@
-import time
 import pyautogui
-from functools import lru_cache
+import time
 
-class ClickEngine:
-    def __init__(self, throttle=0.01):
-        self.throttle = throttle
-        pyautogui.PAUSE = 0
-        pyautogui.MINIMUM_DURATION = 0
-        pyautogui.MINIMUM_SLEEP = 0
+def run_autoclicker(interval: float, iterations: int):
+    if not isinstance(interval, (int, float)) or interval < 0.01:
+        raise ValueError('interval must be float >= 0.01')
+    if not isinstance(iterations, int) or iterations <= 0:
+        raise ValueError('iterations must be positive integer')
 
-    @lru_cache(maxsize=128)
-    def _get_coordinates(self, x: int, y: int):
-        return x, y
+    print(f'starting cycle: {iterations} clicks at {interval}s')
+    for i in range(iterations):
+        try:
+            pyautogui.click()
+            time.sleep(interval)
+        except pyautogui.FailSafeException:
+            print('failsafe triggered')
+            break
 
-    def rapid_fire(self, x: int, y: int, iterations: int):
-        coord = self._get_coordinates(x, y)
-        safe_click = pyautogui.click
-        sleep = time.sleep
+class ClickCoordinator:
+    def __init__(self, settings):
+        self.settings = settings
+
+    def execute(self):
+        cfg = self.settings
+        # validation layer acting as a circuit breaker
+        valid = (
+            isinstance(cfg.get('delay'), (float, int)) and
+            isinstance(cfg.get('limit'), int) and
+            cfg['delay'] >= 0
+        )
         
-        for _ in range(iterations):
-            safe_click(*coord)
-            if self.throttle > 0:
-                sleep(self.throttle)
-
-    def batch_execute(self, actions: list):
-        """
-        Optimized bulk processing using internal coordinate caching
-        and local function lookups to minimize lookup overhead.
-        """
-        for action in actions:
-            self.rapid_fire(*action)
-
-if __name__ == '__main__':
-    engine = ClickEngine(throttle=0.001)
-    engine.rapid_fire(100, 100, 50)
+        if not valid:
+            return False
+            
+        run_autoclicker(cfg['delay'], cfg['limit'])
+        return True
