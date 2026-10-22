@@ -1,29 +1,45 @@
 import pyautogui
 import time
-from typing import Tuple, Optional
+import threading
+from queue import Queue
 
-class ClickProcessor:
-    """Handles automated cursor maneuvers and click logic."""
+class EventProcessor:
+    def __init__(self, interval=0.01):
+        self.queue = Queue()
+        self.interval = interval
+        self._running = True
+        pyautogui.PAUSE = 0
+        self.thread = threading.Thread(target=self._worker, daemon=True)
+        self.thread.start()
 
-    def __init__(self, interval: float = 0.1) -> None:
-        self.interval: float = interval
-        pyautogui.PAUSE = interval
+    def _worker(self):
+        while self._running:
+            if not self.queue.empty():
+                cmd = self.queue.get()
+                if cmd == 'click':
+                    pyautogui.click(_pause=False)
+            else:
+                time.sleep(self.interval)
 
-    def execute_sequence(self, coordinates: list[Tuple[int, int]], clicks: int = 1) -> None:
-        """Iterates through coordinates performing precise click operations."""
-        for x, y in coordinates:
-            pyautogui.click(x=x, y=y, clicks=clicks)
-            time.sleep(self.interval)
+    def trigger(self):
+        self.queue.put('click')
 
-    def safe_emergency_stop(self, pos: Optional[Tuple[int, int]] = None) -> None:
-        """Panic mechanism to jump mouse to safety if required."""
-        if pos:
-            pyautogui.moveTo(pos[0], pos[1])
-        else:
-            pyautogui.moveTo(0, 0)
+    def stop(self):
+        self._running = False
+        self.thread.join()
 
-    def calculate_relative_delta(self, target: Tuple[int, int], current: Tuple[int, int]) -> Tuple[int, int]:
-        """Vector math for screen coordinate displacement calculations."""
-        dx: int = target[0] - current[0]
-        dy: int = target[1] - current[1]
-        return (dx, dy)
+class BatchProcessor(EventProcessor):
+    def _worker(self):
+        while self._running:
+            batch = []
+            while not self.queue.empty() and len(batch) < 10:
+                batch.append(self.queue.get())
+            
+            if batch:
+                for _ in batch:
+                    pyautogui.click(_pause=False)
+            else:
+                time.sleep(self.interval)
+
+# Instantiate with batch logic for performance
+engine = BatchProcessor()
