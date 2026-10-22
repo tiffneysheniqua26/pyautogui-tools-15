@@ -1,30 +1,32 @@
 import logging
-import sys
-from typing import Optional
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
-class ClickerLogger:
-    """Custom logger facade for pyautogui-tools-15 operations."""
+LOG_FILE = Path('autoclicker.log')
 
-    def __init__(self, name: str = "autoclicker") -> None:
-        self.logger: logging.Logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        
-        handler: logging.StreamHandler = logging.StreamHandler(sys.stdout)
-        formatter: logging.Formatter = logging.Formatter(
-            "[%(asctime)s] %(levelname)s | %(message)s", 
-            datefmt="%H:%M:%S"
-        )
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+class ColorFormatter(logging.Formatter):
+    COLORS = {'DEBUG': '\033[94m', 'INFO': '\033[92m', 'WARNING': '\033[93m', 'ERROR': '\033[91m'}
+    def format(self, record):
+        color = self.COLORS.get(record.levelname, '\033[0m')
+        record.msg = f"{color}{record.msg}\033[0m"
+        return super().format(record)
 
-    def log(self, message: str, level: str = "info") -> None:
-        """Dynamic dispatch logging to standard output."""
-        method = getattr(self.logger, level.lower(), self.logger.info)
-        method(message)
+def setup_logger(name: str = 'pyautogui-tools') -> logging.Logger:
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    
+    # Console handler
+    console = logging.StreamHandler()
+    console.setFormatter(ColorFormatter('%(levelname)s: %(message)s'))
+    logger.addHandler(console)
+    
+    # File handler with rotation (1MB per file, keep 3 backups)
+    file_handler = RotatingFileHandler(
+        LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding='utf-8'
+    )
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(file_handler)
+    
+    return logger
 
-    def critical_fail(self, reason: str) -> None:
-        """Abrupt termination helper for catastrophic events."""
-        self.logger.critical(f"CRASH_EVENT: {reason}")
-        sys.exit(1)
-
-logger: ClickerLogger = ClickerLogger()
+logger = setup_logger()
