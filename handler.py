@@ -1,30 +1,32 @@
 import pyautogui
 import time
-import random
-from typing import Tuple
+import threading
 
-def jitter_click(x: int, y: int, intensity: int = 2) -> None:
-    pyautogui.moveTo(x + random.randint(-intensity, intensity), y + random.randint(-intensity, intensity))
-    pyautogui.click()
+class ClickHandler:
+    def __init__(self, interval=0.1):
+        self.interval = interval
+        self.running = False
+        self._thread = None
 
-def safe_sequence(coords: list[Tuple[int, int]], delay: float = 0.5) -> None:
-    for x, y in coords:
-        pyautogui.moveTo(x, y, duration=0.2)
-        pyautogui.click()
-        time.sleep(delay)
+    def _click_loop(self):
+        while self.running:
+            pyautogui.click()
+            time.sleep(self.interval)
 
-def hold_key_pattern(key: str, interval: float, duration: int) -> None:
-    end_time = time.time() + duration
-    while time.time() < end_time:
-        pyautogui.press(key)
-        time.sleep(interval)
+    def start(self):
+        if not self.running:
+            self.running = True
+            self._thread = threading.Thread(target=self._click_loop, daemon=True)
+            self._thread.start()
 
-def screen_search(image_path: str, confidence: float = 0.8) -> Tuple[int, int]:
-    location = pyautogui.locateOnScreen(image_path, confidence=confidence)
-    if location:
-        return pyautogui.center(location)
-    return (-1, -1)
+    def stop(self):
+        self.running = False
+        if self._thread:
+            self._thread.join()
 
-def emergency_stop() -> None:
+    def update_speed(self, new_interval):
+        self.interval = max(0.01, float(new_interval))
+
+def execute_emergency_stop():
     pyautogui.FAILSAFE = True
-    pyautogui.PAUSE = 0.1
+    pyautogui.mouseInfo()
