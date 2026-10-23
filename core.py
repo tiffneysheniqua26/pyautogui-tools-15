@@ -1,36 +1,35 @@
 import pyautogui
 import time
+import sys
 
-def run_autoclicker(interval: float, iterations: int):
-    if not isinstance(interval, (int, float)) or interval < 0.01:
-        raise ValueError('interval must be float >= 0.01')
-    if not isinstance(iterations, int) or iterations <= 0:
-        raise ValueError('iterations must be positive integer')
+class ClickerEngine:
+    def __init__(self, interval=0.1, fail_safe=True):
+        pyautogui.FAILSAFE = fail_safe
+        self.interval = interval
 
-    print(f'starting cycle: {iterations} clicks at {interval}s')
-    for i in range(iterations):
+    def execute(self, clicks):
         try:
-            pyautogui.click()
-            time.sleep(interval)
+            for i in range(clicks):
+                x, y = pyautogui.position()
+                if x < 0 or y < 0:
+                    raise ValueError('cursor outside monitor boundaries')
+                pyautogui.click(x, y)
+                time.sleep(self.interval)
         except pyautogui.FailSafeException:
-            print('failsafe triggered')
-            break
+            print('emergency abort triggered by user')
+        except Exception as e:
+            self.graceful_degradation(e)
 
-class ClickCoordinator:
-    def __init__(self, settings):
-        self.settings = settings
+    def graceful_degradation(self, err):
+        print(f'runtime anomaly detected: {err}')
+        sys.exit(1)
 
-    def execute(self):
-        cfg = self.settings
-        # validation layer acting as a circuit breaker
-        valid = (
-            isinstance(cfg.get('delay'), (float, int)) and
-            isinstance(cfg.get('limit'), int) and
-            cfg['delay'] >= 0
-        )
-        
-        if not valid:
-            return False
-            
-        run_autoclicker(cfg['delay'], cfg['limit'])
-        return True
+def start_sequence(count):
+    try:
+        engine = ClickerEngine(interval=0.05)
+        engine.execute(count)
+    except KeyboardInterrupt:
+        print('manual interruption received')
+
+if __name__ == '__main__':
+    start_sequence(100)
