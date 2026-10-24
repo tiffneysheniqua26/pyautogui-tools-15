@@ -1,27 +1,26 @@
 class AutoClickerError(Exception):
-    """Base exception for pyautogui-tools-15."""
-    pass
+    """Base exception for pyautogui-tools-15 errors."""
 
 class CoordinateOutOfBoundsError(AutoClickerError):
-    """Raised when click targets are outside monitor bounds."""
+    """Raised when click target is outside screen boundaries."""
     def __init__(self, x, y):
-        super().__init__(f"Target ({x}, {y}) exceeds screen resolution boundaries.")
+        super().__init__(f"Coordinates ({x}, {y}) are outside the active workspace.")
 
-class HotkeyRegistrationError(AutoClickerError):
-    """Raised when keyboard hooks fail to initialize."""
-    def __init__(self, key):
-        super().__init__(f"Failed to register global hotkey: {key}.")
+class ProcessInterruptedError(AutoClickerError):
+    """Raised when user manually halts the click stream."""
+    def __init__(self, message="Execution sequence aborted by user keyboard interrupt."):
+        super().__init__(message)
 
-class ScriptInterruption(AutoClickerError):
-    """Custom signal for user-requested emergency stops."""
-    pass
+class ConfigValidationError(AutoClickerError):
+    """Raised when provided configuration values fail integrity checks."""
+    def __init__(self, param, value):
+        super().__init__(f"Invalid configuration parameter '{param}': {value} is out of bounds.")
 
 class ExecutionTimeoutError(AutoClickerError):
-    """Raised when click sequences exceed permitted time frames."""
+    """Raised when a specific automation sequence hangs too long."""
     def __init__(self, duration):
-        super().__init__(f"Execution exceeded maximum duration of {duration} seconds.")
+        super().__init__(f"Sequence exceeded safety threshold of {duration} seconds.")
 
-class ConfigurationError(AutoClickerError):
-    """Raised during invalid user settings loading."""
-    def __init__(self, field, reason):
-        super().__init__(f"Config field '{field}' is invalid: {reason}.")
+class SafeExit(Exception):
+    """Graceful stop signal that is not caught by general error handlers."""
+    pass
