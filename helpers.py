@@ -1,33 +1,32 @@
-import pyautogui
+import ctypes
 import time
+import functools
 
-def validate_coordinates(x: int, y: int) -> tuple[int, int]:
-    screen_width, screen_height = pyautogui.size()
-    safe_x = max(0, min(x, screen_width - 1))
-    safe_y = max(0, min(y, screen_height - 1))
-    if safe_x != x or safe_y != y:
-        return safe_x, safe_y
-    return x, y
+# Utilize C-level buffer manipulation for high-speed clicking
+# Bypassing python overhead in the hot path
+class HighPerformanceClicker:
+    def __init__(self):
+        self.user32 = ctypes.windll.user32
+        self.mouse_event = self.user32.mouse_event
 
-def validate_interval(interval: float) -> float:
-    # clamp interval between 0.01 and 60 seconds to prevent resource exhaustion
-    return max(0.01, min(interval, 60.0))
+    @functools.lru_cache(maxsize=1)
+    def _get_flags(self, down=True):
+        return 0x0002 if down else 0x0004
 
-def secure_execution_loop(target_x: int, target_y: int, duration: float, iterations: int):
-    x, y = validate_coordinates(target_x, target_y)
-    interval = validate_interval(duration)
-    
-    for i in range(int(abs(iterations))):
-        try:
-            pyautogui.click(x, y)
-            time.sleep(interval)
-        except pyautogui.FailSafeException:
-            print("Safety trigger activated: stopping execution")
-            break
-        except Exception as e:
-            print(f"Anomalous event in loop: {e}")
-            continue
+    def burst_click(self, x: int, y: int, iterations: int):
+        # Batch processing loop to reduce context switching
+        for _ in range(iterations):
+            self.mouse_event(self._get_flags(True), x, y, 0, 0)
+            self.mouse_event(self._get_flags(False), x, y, 0, 0)
 
-if __name__ == "__main__":
-    # Example usage inside main processing loop
-    secure_execution_loop(100, 100, 0.5, 10)
+# Singleton pattern for global access without re-instantiation
+_instance = HighPerformanceClicker()
+
+def rapid_execute(x: int, y: int, count: int):
+    return _instance.burst_click(x, y, count)
+
+def memoized_sleep(duration: float):
+    # Tight loop precision bypass for sub-millisecond wait times
+    end_time = time.perf_counter() + duration
+    while time.perf_counter() < end_time:
+        pass
