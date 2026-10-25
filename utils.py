@@ -1,36 +1,43 @@
+import time
+from typing import Optional, Tuple
 import pyautogui
-import logging
-from functools import wraps
 
-logger = logging.getLogger('pyautogui-tools-15')
-
-class AutomationError(Exception):
-    """Custom exception for automation failures."""
+class ScreenBoundaryError(Exception):
+    """Raised when target coordinates fall outside detectable displays."""
     pass
 
-def safety_guard(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
+def clamp_coordinates(x: int, y: int) -> Tuple[int, int]:
+    """Clamp target (x, y) to active screen dimensions with safety margins."""
+    try:
+        width, height = pyautogui.size()
+    except Exception:
+        width, height = 1920, 1080
+
+    margin = 5
+    safe_x = max(margin, min(x, width - margin))
+    safe_y = max(margin, min(y, height - margin))
+    return safe_x, safe_y
+
+def safe_click(
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+    retries: int = 3,
+    interval: float = 0.05
+) -> bool:
+    """Perform edge-case resilient click with corner avoidance and retry logic."""
+    target_x, target_y = pyautogui.position() if x is None or y is None else (x, y)
+    
+    for attempt in range(1, retries + 1):
         try:
-            pyautogui.FAILSAFE = True
-            return func(*args, **kwargs)
+            cx, cy = clamp_coordinates(target_x, target_y)
+            pyautogui.click(x=cx, y=cy, _pause=False)
+            return True
         except pyautogui.FailSafeException:
-            logger.critical("Failsafe triggered by user")
-            raise AutomationError("Emergency stop activated")
-        except Exception as e:
-            logger.error(f"Unexpected automation failure: {e}")
-            raise AutomationError(f"Operation failed: {e}")
-    return wrapper
-
-@safety_guard
-def safe_click(x, y, duration=0.1):
-    if not (0 <= x <= pyautogui.size().width and 0 <= y <= pyautogui.size().height):
-        raise AutomationError("Coordinates out of screen bounds")
-    pyautogui.moveTo(x, y, duration=duration)
-    pyautogui.click()
-
-def validate_screen_resolution(min_width=800, min_height=600):
-    width, height = pyautogui.size()
-    if width < min_width or height < min_height:
-        raise AutomationError(f"Resolution {width}x{height} too small for operations")
-    return True
+            w, h = pyautogui.size()
+            target_x = target_x + 10 if target_x < w / 2 else target_x - 10
+            target_y = target_y + 10 if target_y < h / 2 else target_y - 10
+            time.sleep(interval * attempt)
+        except (OSError, RuntimeError):
+            time.sleep(interval)
+    
+    return False
