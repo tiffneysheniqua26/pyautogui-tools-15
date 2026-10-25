@@ -1,32 +1,35 @@
 import pyautogui
 import time
-import threading
+import logging
 
-class ClickHandler:
-    def __init__(self, interval=0.1):
-        self.interval = interval
-        self.running = False
-        self._thread = None
+class ClickError(Exception): pass
 
-    def _click_loop(self):
-        while self.running:
-            pyautogui.click()
-            time.sleep(self.interval)
+def execute_safe_click(x, y, interval=0.1):
+    """Attempts to click, gracefully yielding on failures."""
+    try:
+        if not (0 <= x <= pyautogui.size().width and 0 <= y <= pyautogui.size().height):
+            raise ValueError('Coordinates outside screen boundaries')
+        
+        pyautogui.moveTo(x, y, duration=0.1)
+        pyautogui.click()
+        time.sleep(interval)
+        
+    except pyautogui.FailSafeException:
+        logging.critical('Panic triggered: aborting click sequence')
+        raise
+    except Exception as e:
+        logging.error(f'Runtime glitch: {e}')
+        return False
+    return True
 
-    def start(self):
-        if not self.running:
-            self.running = True
-            self._thread = threading.Thread(target=self._click_loop, daemon=True)
-            self._thread.start()
-
-    def stop(self):
-        self.running = False
-        if self._thread:
-            self._thread.join()
-
-    def update_speed(self, new_interval):
-        self.interval = max(0.01, float(new_interval))
-
-def execute_emergency_stop():
-    pyautogui.FAILSAFE = True
-    pyautogui.mouseInfo()
+def batch_process_clicks(coords):
+    """Iterative processing with fault tolerance."""
+    results = []
+    for i, (x, y) in enumerate(coords):
+        try:
+            status = execute_safe_click(x, y)
+            results.append(status)
+        except Exception:
+            logging.warning(f'Skipping point {i} due to instability')
+            continue
+    return all(results)
