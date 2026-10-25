@@ -1,32 +1,36 @@
-import ctypes
+import pyautogui
 import time
-import functools
+from typing import Tuple, Optional
 
-# Utilize C-level buffer manipulation for high-speed clicking
-# Bypassing python overhead in the hot path
-class HighPerformanceClicker:
-    def __init__(self):
-        self.user32 = ctypes.windll.user32
-        self.mouse_event = self.user32.mouse_event
+def get_safe_coords(x: int, y: int) -> Tuple[int, int]:
+    """Ensures coordinates stay within primary monitor boundaries."""
+    width, height = pyautogui.size()
+    return max(0, min(x, width - 1)), max(0, min(y, height - 1))
 
-    @functools.lru_cache(maxsize=1)
-    def _get_flags(self, down=True):
-        return 0x0002 if down else 0x0004
+def perform_click(x: int, y: int, interval: float = 0.1) -> None:
+    """Executes a guarded click operation at specific screen coordinates."""
+    safe_x, safe_y = get_safe_coords(x, y)
+    pyautogui.click(x=safe_x, y=safe_y)
+    time.sleep(interval)
 
-    def burst_click(self, x: int, y: int, iterations: int):
-        # Batch processing loop to reduce context switching
-        for _ in range(iterations):
-            self.mouse_event(self._get_flags(True), x, y, 0, 0)
-            self.mouse_event(self._get_flags(False), x, y, 0, 0)
+def get_mouse_position() -> Tuple[int, int]:
+    """Retrieves current cursor location as a sanitized tuple."""
+    pos = pyautogui.position()
+    return int(pos.x), int(pos.y)
 
-# Singleton pattern for global access without re-instantiation
-_instance = HighPerformanceClicker()
+def jitter_cursor(intensity: int = 2) -> None:
+    """Adds microscopic movement to prevent idle state detection."""
+    x, y = get_mouse_position()
+    pyautogui.moveRel(intensity, -intensity)
+    pyautogui.moveRel(-intensity, intensity)
 
-def rapid_execute(x: int, y: int, count: int):
-    return _instance.burst_click(x, y, count)
+class ClickSequence:
+    """Stateful executor for automated click pattern generation."""
+    def __init__(self, sequence: list[Tuple[int, int]]) -> None:
+        self.sequence = sequence
 
-def memoized_sleep(duration: float):
-    # Tight loop precision bypass for sub-millisecond wait times
-    end_time = time.perf_counter() + duration
-    while time.perf_counter() < end_time:
-        pass
+    def run(self, delay: float = 0.5) -> None:
+        """Iterates through predefined sequence with dynamic timing."""
+        for x, y in self.sequence:
+            perform_click(x, y)
+            time.sleep(delay)
