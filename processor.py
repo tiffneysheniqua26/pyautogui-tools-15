@@ -1,45 +1,32 @@
-import pyautogui
-import time
-import threading
-from queue import Queue
+import json
+import base64
+import zlib
+from typing import Dict, Any
 
-class EventProcessor:
-    def __init__(self, interval=0.01):
-        self.queue = Queue()
-        self.interval = interval
-        self._running = True
-        pyautogui.PAUSE = 0
-        self.thread = threading.Thread(target=self._worker, daemon=True)
-        self.thread.start()
+class ClickerDataProcessor:
+    """Serialization engine for click sequences using zlib compression."""
+    
+    def __init__(self, secret_key: str = "pyautogui-15"):
+        self._salt = secret_key.encode()
 
-    def _worker(self):
-        while self._running:
-            if not self.queue.empty():
-                cmd = self.queue.get()
-                if cmd == 'click':
-                    pyautogui.click(_pause=False)
-            else:
-                time.sleep(self.interval)
+    def pack(self, data: Dict[str, Any]) -> str:
+        """Compress and encode data payload for storage."""
+        raw_json = json.dumps(data, sort_keys=True).encode()
+        compressed = zlib.compress(raw_json + self._salt, level=9)
+        return base64.urlsafe_b64encode(compressed).decode("utf-8")
 
-    def trigger(self):
-        self.queue.put('click')
+    def unpack(self, payload: str) -> Dict[str, Any]:
+        """Decode and decompress stored payload safely."""
+        try:
+            decoded = base64.urlsafe_b64decode(payload.encode())
+            decompressed = zlib.decompress(decoded)
+            final_data = decompressed.replace(self._salt, b"")
+            return json.loads(final_data)
+        except (ValueError, zlib.error, json.JSONDecodeError):
+            return {}
 
-    def stop(self):
-        self._running = False
-        self.thread.join()
-
-class BatchProcessor(EventProcessor):
-    def _worker(self):
-        while self._running:
-            batch = []
-            while not self.queue.empty() and len(batch) < 10:
-                batch.append(self.queue.get())
-            
-            if batch:
-                for _ in batch:
-                    pyautogui.click(_pause=False)
-            else:
-                time.sleep(self.interval)
-
-# Instantiate with batch logic for performance
-engine = BatchProcessor()
+    @staticmethod
+    def validate_coordinates(coords: tuple) -> bool:
+        """Sanity check for screen boundaries."""
+        x, y = coords
+        return isinstance(x, int) and isinstance(y, int) and x >= 0 and y >= 0
