@@ -1,36 +1,38 @@
 import pyautogui
 import time
-from typing import Tuple, Optional
 
-def get_safe_coords(x: int, y: int) -> Tuple[int, int]:
-    """Ensures coordinates stay within primary monitor boundaries."""
-    width, height = pyautogui.size()
-    return max(0, min(x, width - 1)), max(0, min(y, height - 1))
+def validate_coordinates(x, y):
+    screen_w, screen_h = pyautogui.size()
+    if not (0 <= x <= screen_w and 0 <= y <= screen_h):
+        raise ValueError(f"Coordinates ({x}, {y}) out of screen bounds ({screen_w}, {screen_h})")
+    return True
 
-def perform_click(x: int, y: int, interval: float = 0.1) -> None:
-    """Executes a guarded click operation at specific screen coordinates."""
-    safe_x, safe_y = get_safe_coords(x, y)
-    pyautogui.click(x=safe_x, y=safe_y)
-    time.sleep(interval)
+def validate_interval(interval):
+    if not isinstance(interval, (int, float)) or interval < 0.001:
+        raise ValueError(f"Interval {interval} is too fast or invalid")
+    return True
 
-def get_mouse_position() -> Tuple[int, int]:
-    """Retrieves current cursor location as a sanitized tuple."""
-    pos = pyautogui.position()
-    return int(pos.x), int(pos.y)
+def sanitized_click_params(x, y, interval):
+    try:
+        validate_coordinates(x, y)
+        validate_interval(interval)
+        return True
+    except ValueError as e:
+        print(f"[!] Validation failure: {e}")
+        return False
 
-def jitter_cursor(intensity: int = 2) -> None:
-    """Adds microscopic movement to prevent idle state detection."""
-    x, y = get_mouse_position()
-    pyautogui.moveRel(intensity, -intensity)
-    pyautogui.moveRel(-intensity, intensity)
+def perform_safe_click(x, y, interval):
+    if sanitized_click_params(x, y, interval):
+        pyautogui.click(x, y)
+        time.sleep(interval)
+        return True
+    return False
 
-class ClickSequence:
-    """Stateful executor for automated click pattern generation."""
-    def __init__(self, sequence: list[Tuple[int, int]]) -> None:
-        self.sequence = sequence
-
-    def run(self, delay: float = 0.5) -> None:
-        """Iterates through predefined sequence with dynamic timing."""
-        for x, y in self.sequence:
-            perform_click(x, y)
-            time.sleep(delay)
+# The click loop logic for processing
+def execute_click_batch(targets):
+    results = []
+    for target in targets:
+        x, y, interval = target
+        status = perform_safe_click(x, y, interval)
+        results.append(status)
+    return all(results)
