@@ -1,58 +1,31 @@
-import math
 import time
-from typing import Generator, Callable, Optional, Tuple
-from dataclasses import dataclass, field
+import pyautogui
+from functools import lru_cache
 
-@dataclass
-class PacingCadence:
-    """Calculates dynamic inter-click delays using harmonic oscillation to emulate human jitter."""
-    base_interval: float = 0.1
-    variance: float = 0.02
-    frequency: float = 0.5
-    _step: int = field(default=0, init=False, repr=False)
+class ClickEngine:
+    def __init__(self, interval=0.01):
+        self.interval = interval
+        pyautogui.PAUSE = 0
+        self._click_func = pyautogui.click
 
-    def __iter__(self) -> Generator[float, None, None]:
-        """Yields continuous variable delay times based on a sine wave transformation."""
-        while True:
-            jitter = math.sin(self._step * self.frequency) * self.variance
-            yield max(0.001, self.base_interval + jitter)
-            self._step += 1
+    @lru_cache(maxsize=16)
+    def _get_coord_tuple(self, x, y):
+        return (x, y)
 
-class ClickSequenceEngine:
-    """Orchestrates clicking cadences with customizable trigger callbacks and dynamic pacing."""
+    def run_burst(self, x, y, count=100):
+        coords = self._get_coord_tuple(x, y)
+        batch = [coords] * count
+        for _ in batch:
+            self._click_func(*_)
+            if self.interval > 0:
+                time.sleep(self.interval)
 
-    def __init__(
-        self,
-        action_callback: Callable[[int, int], None],
-        cadence: Optional[PacingCadence] = None
-    ) -> None:
-        """Initialize the engine with a targeting callback and delay cadence generator."""
-        self.action_callback: Callable[[int, int], None] = action_callback
-        self.cadence: PacingCadence = cadence or PacingCadence()
-        self._active: bool = False
+    def optimized_loop(self, stop_event, x, y):
+        while not stop_event.is_set():
+            self._click_func(x, y)
 
-    def execute_burst(
-        self,
-        coordinates: Tuple[int, int],
-        clicks: int = 10
-    ) -> int:
-        """Executes a fixed series of clicks with oscillating intervals over the target position."""
-        self._active = True
-        performed: int = 0
-        cadence_gen = iter(self.cadence)
-
-        for _ in range(clicks):
-            if not self._active:
-                break
-            x, y = coordinates
-            self.action_callback(x, y)
-            performed += 1
-            delay: float = next(cadence_gen)
-            time.sleep(delay)
-
-        self._active = False
-        return performed
-
-    def stop(self) -> None:
-        """Signals the current burst execution sequence to abort gracefully."""
-        self._active = False
+    def fast_click(self, x, y, duration=1):
+        start = time.perf_counter()
+        while time.perf_counter() - start < duration:
+            pyautogui.mouseDown(x, y)
+            pyautogui.mouseUp(x, y)
