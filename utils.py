@@ -2,29 +2,34 @@ import time
 import functools
 import random
 
-def retry_with_jitter(max_attempts=3, base_delay=1.0, exceptions=(Exception,)):
+def exponential_backoff(max_retries=3, base_delay=1.0):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            attempts = 0
-            while attempts < max_attempts:
+            retries = 0
+            while retries < max_retries:
                 try:
                     return func(*args, **kwargs)
-                except exceptions as e:
-                    attempts += 1
-                    if attempts >= max_attempts:
+                except Exception as e:
+                    retries += 1
+                    if retries >= max_retries:
                         raise e
-                    sleep_time = base_delay * (2 ** (attempts - 1)) + random.uniform(0, 0.5)
+                    jitter = random.uniform(0, 0.5)
+                    sleep_time = (base_delay * (2 ** (retries - 1))) + jitter
                     time.sleep(sleep_time)
             return None
         return wrapper
     return decorator
 
-class NetworkHandler:
+class NetworkInterface:
     @staticmethod
-    @retry_with_jitter(max_attempts=4, base_delay=0.5)
+    @exponential_backoff(max_retries=4)
     def fetch_remote_config(url):
-        # Simulation of unstable network call
+        # Simulate unstable network condition
         if random.random() < 0.7:
-            raise ConnectionError('Network flicker detected')
-        return {'status': 'active', 'interval': 0.1}
+            raise ConnectionError("remote server latency spike")
+        return {"click_interval": 0.5, "enabled": True}
+
+def get_stable_data(url):
+    data = NetworkInterface.fetch_remote_config(url)
+    return data or {}
