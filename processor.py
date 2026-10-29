@@ -1,32 +1,39 @@
-import json
-import base64
-import zlib
-from typing import Dict, Any
+import time
+import random
+import functools
+from typing import Callable, Any
 
-class ClickerDataProcessor:
-    """Serialization engine for click sequences using zlib compression."""
-    
-    def __init__(self, secret_key: str = "pyautogui-15"):
-        self._salt = secret_key.encode()
+def backoff_retry(max_attempts: int = 3, base_delay: float = 0.5):
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            last_ex = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_ex = e
+                    delay = base_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                    time.sleep(delay)
+            raise last_ex
+        return wrapper
+    return decorator
 
-    def pack(self, data: Dict[str, Any]) -> str:
-        """Compress and encode data payload for storage."""
-        raw_json = json.dumps(data, sort_keys=True).encode()
-        compressed = zlib.compress(raw_json + self._salt, level=9)
-        return base64.urlsafe_b64encode(compressed).decode("utf-8")
+class NetworkProcessor:
+    def __init__(self, timeout: int = 5):
+        self.timeout = timeout
 
-    def unpack(self, payload: str) -> Dict[str, Any]:
-        """Decode and decompress stored payload safely."""
+    @backoff_retry(max_attempts=4)
+    def sync_autoclicker_config(self, url: str):
+        print(f"Syncing payload from {url}...")
+        # Simulated unstable network call
+        if random.random() < 0.7:
+            raise ConnectionError("Unstable network link detected")
+        return {"status": "success", "payload": "authorized"}
+
+    def run_safe_sync(self, url: str):
         try:
-            decoded = base64.urlsafe_b64decode(payload.encode())
-            decompressed = zlib.decompress(decoded)
-            final_data = decompressed.replace(self._salt, b"")
-            return json.loads(final_data)
-        except (ValueError, zlib.error, json.JSONDecodeError):
-            return {}
-
-    @staticmethod
-    def validate_coordinates(coords: tuple) -> bool:
-        """Sanity check for screen boundaries."""
-        x, y = coords
-        return isinstance(x, int) and isinstance(y, int) and x >= 0 and y >= 0
+            return self.sync_autoclicker_config(url)
+        except Exception as e:
+            print(f"Critical failure after retries: {e}")
+            return None
