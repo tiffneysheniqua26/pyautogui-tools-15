@@ -1,35 +1,36 @@
 import pyautogui
 import time
-import logging
 
-class ClickError(Exception): pass
+class InputHandler:
+    def __init__(self, interval: float, clicks: int):
+        self.interval = self._validate_positive(interval, 0.1)
+        self.clicks = self._validate_positive(clicks, 1)
 
-def execute_safe_click(x, y, interval=0.1):
-    """Attempts to click, gracefully yielding on failures."""
-    try:
-        if not (0 <= x <= pyautogui.size().width and 0 <= y <= pyautogui.size().height):
-            raise ValueError('Coordinates outside screen boundaries')
-        
-        pyautogui.moveTo(x, y, duration=0.1)
-        pyautogui.click()
-        time.sleep(interval)
-        
-    except pyautogui.FailSafeException:
-        logging.critical('Panic triggered: aborting click sequence')
-        raise
-    except Exception as e:
-        logging.error(f'Runtime glitch: {e}')
-        return False
-    return True
-
-def batch_process_clicks(coords):
-    """Iterative processing with fault tolerance."""
-    results = []
-    for i, (x, y) in enumerate(coords):
+    def _validate_positive(self, value, fallback):
         try:
-            status = execute_safe_click(x, y)
-            results.append(status)
-        except Exception:
-            logging.warning(f'Skipping point {i} due to instability')
-            continue
-    return all(results)
+            val = float(value)
+            return val if val > 0 else fallback
+        except (ValueError, TypeError):
+            return fallback
+
+    def run_click_sequence(self):
+        print(f"Initiating {self.clicks} clicks with {self.interval}s interval")
+        for i in range(int(self.clicks)):
+            try:
+                x, y = pyautogui.position()
+                if not (0 <= x <= 10000 and 0 <= y <= 10000):
+                    raise ValueError("Coordinates out of bounds")
+                pyautogui.click(x, y)
+                time.sleep(self.interval)
+            except Exception as e:
+                print(f"Execution aborted at cycle {i}: {e}")
+                break
+
+if __name__ == "__main__":
+    # Example injection: creative sanitization of user input
+    user_input = {"speed": "0.5", "count": "10"}
+    handler = InputHandler(
+        interval=user_input.get("speed", 0.5),
+        clicks=user_input.get("count", 1)
+    )
+    handler.run_click_sequence()
