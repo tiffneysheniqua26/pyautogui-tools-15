@@ -1,39 +1,49 @@
 import time
-import random
-import functools
-from typing import Callable, Any
+from typing import List, Tuple, Optional
 
-def backoff_retry(max_attempts: int = 3, base_delay: float = 0.5):
-    def decorator(func: Callable):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs) -> Any:
-            last_ex = None
-            for attempt in range(max_attempts):
-                try:
-                    return func(*args, **kwargs)
-                except Exception as e:
-                    last_ex = e
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 0.1)
-                    time.sleep(delay)
-            raise last_ex
-        return wrapper
-    return decorator
 
-class NetworkProcessor:
-    def __init__(self, timeout: int = 5):
-        self.timeout = timeout
+class TargetBoundsError(Exception):
+    """Raised when coordinates remain out of bounds after adjustment."""
 
-    @backoff_retry(max_attempts=4)
-    def sync_autoclicker_config(self, url: str):
-        print(f"Syncing payload from {url}...")
-        # Simulated unstable network call
-        if random.random() < 0.7:
-            raise ConnectionError("Unstable network link detected")
-        return {"status": "success", "payload": "authorized"}
 
-    def run_safe_sync(self, url: str):
+class SafeClickProcessor:
+    def __init__(self, max_retries: int = 3, safety_padding: int = 10):
+        self.max_retries = max_retries
+        self.safety_padding = safety_padding
+
+    def _get_screen_dimensions(self) -> Tuple[int, int]:
         try:
-            return self.sync_autoclicker_config(url)
-        except Exception as e:
-            print(f"Critical failure after retries: {e}")
-            return None
+            import pyautogui
+            return pyautogui.size()
+        except Exception:
+            return (1920, 1080)
+
+    def clamp_coords(self, x: int, y: int) -> Tuple[int, int]:
+        width, height = self._get_screen_dimensions()
+        clamped_x = max(self.safety_padding, min(x, width - self.safety_padding))
+        clamped_y = max(self.safety_padding, min(y, height - self.safety_padding))
+        return clamped_x, clamped_y
+
+    def execute_click(self, x: int, y: int, clicks: int = 1) -> bool:
+        cx, cy = self.clamp_coords(x, y)
+        
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                import pyautogui
+                pyautogui.moveTo(cx, cy, duration=0.02)
+                pyautogui.click(clicks=clicks)
+                return True
+            except Exception as exc:
+                if "FailSafe" in type(exc).__name__:
+                    cx = max(cx + 15, self.safety_padding)
+                    cy = max(cy + 15, self.safety_padding)
+                time.sleep(0.05 * attempt)
+        
+        return False
+
+    def batch_process(self, points: List[Tuple[int, int]]) -> int:
+        completed = 0
+        for pt_x, pt_y in points:
+            if self.execute_click(pt_x, pt_y):
+                completed += 1
+        return completed
