@@ -2,34 +2,23 @@ import time
 import functools
 import random
 
-def exponential_backoff(max_retries=3, base_delay=1.0):
+def retry_network_operation(max_attempts=3, backoff_factor=0.5):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            retries = 0
-            while retries < max_retries:
+            attempts = 0
+            while attempts < max_attempts:
                 try:
                     return func(*args, **kwargs)
-                except Exception as e:
-                    retries += 1
-                    if retries >= max_retries:
+                except (ConnectionError, TimeoutError) as e:
+                    attempts += 1
+                    if attempts >= max_attempts:
                         raise e
-                    jitter = random.uniform(0, 0.5)
-                    sleep_time = (base_delay * (2 ** (retries - 1))) + jitter
+                    sleep_time = backoff_factor * (2 ** (attempts - 1)) + random.uniform(0, 0.1)
                     time.sleep(sleep_time)
-            return None
         return wrapper
     return decorator
 
-class NetworkInterface:
-    @staticmethod
-    @exponential_backoff(max_retries=4)
-    def fetch_remote_config(url):
-        # Simulate unstable network condition
-        if random.random() < 0.7:
-            raise ConnectionError("remote server latency spike")
-        return {"click_interval": 0.5, "enabled": True}
-
-def get_stable_data(url):
-    data = NetworkInterface.fetch_remote_config(url)
-    return data or {}
+def pulse_connection(check_fn):
+    """Decorator that wraps network calls with jittered retries."""
+    return retry_network_operation(max_attempts=5, backoff_factor=1.0)(check_fn)
