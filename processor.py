@@ -1,49 +1,37 @@
 import time
-from typing import List, Tuple, Optional
+import functools
+from typing import Callable, Any
 
+def retry_operation(max_attempts: int = 3, delay: float = 1.0):
+    def decorator(func: Callable):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Any:
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    last_exception = e
+                    time.sleep(delay * (2 ** attempt))
+            raise last_exception
+        return wrapper
+    return decorator
 
-class TargetBoundsError(Exception):
-    """Raised when coordinates remain out of bounds after adjustment."""
+class NetworkProcessor:
+    """Automated network clicker synchronization tool."""
+    def __init__(self, timeout: int = 5):
+        self.timeout = timeout
 
+    @retry_operation(max_attempts=3, delay=0.5)
+    def fetch_click_coords(self) -> dict:
+        import requests
+        response = requests.get("http://localhost:8080/coords", timeout=self.timeout)
+        response.raise_for_status()
+        return response.json()
 
-class SafeClickProcessor:
-    def __init__(self, max_retries: int = 3, safety_padding: int = 10):
-        self.max_retries = max_retries
-        self.safety_padding = safety_padding
-
-    def _get_screen_dimensions(self) -> Tuple[int, int]:
-        try:
-            import pyautogui
-            return pyautogui.size()
-        except Exception:
-            return (1920, 1080)
-
-    def clamp_coords(self, x: int, y: int) -> Tuple[int, int]:
-        width, height = self._get_screen_dimensions()
-        clamped_x = max(self.safety_padding, min(x, width - self.safety_padding))
-        clamped_y = max(self.safety_padding, min(y, height - self.safety_padding))
-        return clamped_x, clamped_y
-
-    def execute_click(self, x: int, y: int, clicks: int = 1) -> bool:
-        cx, cy = self.clamp_coords(x, y)
-        
-        for attempt in range(1, self.max_retries + 1):
-            try:
-                import pyautogui
-                pyautogui.moveTo(cx, cy, duration=0.02)
-                pyautogui.click(clicks=clicks)
-                return True
-            except Exception as exc:
-                if "FailSafe" in type(exc).__name__:
-                    cx = max(cx + 15, self.safety_padding)
-                    cy = max(cy + 15, self.safety_padding)
-                time.sleep(0.05 * attempt)
-        
-        return False
-
-    def batch_process(self, points: List[Tuple[int, int]]) -> int:
-        completed = 0
-        for pt_x, pt_y in points:
-            if self.execute_click(pt_x, pt_y):
-                completed += 1
-        return completed
+def sync_session_coordinates(processor: NetworkProcessor) -> None:
+    try:
+        data = processor.fetch_click_coords()
+        print(f"Sync complete: {data}")
+    except Exception as e:
+        print(f"Critical network failure after retries: {e}")
