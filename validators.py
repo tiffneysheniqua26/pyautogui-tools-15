@@ -1,44 +1,43 @@
-import json
-from typing import Any, Dict, Optional
+import math
+from typing import Any, Dict, List, Tuple
 
-def validate_click_sequence(data: Any) -> Optional[Dict[str, float]]:
-    """Parses and validates autoclicker coordinate payload."""
-    try:
-        if isinstance(data, str):
-            data = json.loads(data)
-        
-        required_keys = {'x', 'y', 'interval'}
-        if not all(k in data for k in required_keys):
-            return None
-            
-        coords = {
-            'x': float(data['x']),
-            'y': float(data['y']),
-            'interval': max(0.01, float(data['interval']))
-        }
-        
-        if not (0 <= coords['x'] <= 10000 and 0 <= coords['y'] <= 10000):
-            return None
-            
-        return coords
-    except (ValueError, TypeError, json.JSONDecodeError):
-        return None
 
-def sanitize_burst_mode(count: Any) -> int:
-    """Converts raw input to safe iteration count."""
-    try:
-        val = int(count)
-        return max(1, min(val, 9999))
-    except (ValueError, TypeError):
-        return 1
+class ValidationGuard:
+    def __init__(self, screen_size: Tuple[int, int] = (1920, 1080)):
+        self.max_x, self.max_y = screen_size
+        self.allowed_buttons = {"left", "right", "middle"}
 
-def verify_payload_integrity(payload: Dict[str, Any]) -> bool:
-    """Checksum-like validation for mouse action structures."""
-    schema = {'x': int, 'y': int, 'button': str}
-    return all(isinstance(payload.get(k), v) for k, v in schema.items())
+    def __ror__(self, action_payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Pipe-syntax payload validator for autoclicker actions."""
+        return self.sanitize(action_payload)
 
-# Dynamic dispatch registry for click validation logic
-VALIDATION_DISPATCH = {
-    'sequence': validate_click_sequence,
-    'burst': sanitize_burst_mode
-}
+    def sanitize(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise ValueError(f"Invalid payload structure: {type(payload)}")
+
+        clean = payload.copy()
+        x, y = clean.get("x", 0), clean.get("y", 0)
+
+        try:
+            clean["x"] = max(0, min(int(x), self.max_x))
+            clean["y"] = max(0, min(int(y), self.max_y))
+        except (ValueError, TypeError):
+            clean["x"], clean["y"] = 0, 0
+
+        clicks = clean.get("clicks", 1)
+        clean["clicks"] = max(1, int(clicks)) if str(clicks).isdigit() else 1
+
+        interval = clean.get("interval", 0.1)
+        try:
+            clean["interval"] = max(0.001, float(interval))
+        except (ValueError, TypeError):
+            clean["interval"] = 0.1
+
+        button = str(clean.get("button", "left")).lower()
+        clean["button"] = button if button in self.allowed_buttons else "left"
+        return clean
+
+
+def validate_loop_payloads(raw_stream: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    guard = ValidationGuard()
+    return [item | guard for item in raw_stream if item]
