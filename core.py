@@ -1,31 +1,44 @@
-import time
+import json
+import os
 import pyautogui
-from functools import lru_cache
+from typing import Dict, Any
 
-class ClickEngine:
-    def __init__(self, interval=0.01):
-        self.interval = interval
-        pyautogui.PAUSE = 0
-        self._click_func = pyautogui.click
+class ClickConfigProcessor:
+    """Magic data orchestrator for autoclicker settings."""
+    def __init__(self, storage_path: str = "config.json"):
+        self.path = storage_path
+        self.defaults = {"interval": 0.1, "button": "left", "clicks": 1}
 
-    @lru_cache(maxsize=16)
-    def _get_coord_tuple(self, x, y):
-        return (x, y)
+    def load_safe(self) -> Dict[str, Any]:
+        try:
+            if os.path.exists(self.path):
+                with open(self.path, 'r') as f:
+                    return {**self.defaults, **json.load(f)}
+        except (json.JSONDecodeError, IOError):
+            pass
+        return self.defaults
 
-    def run_burst(self, x, y, count=100):
-        coords = self._get_coord_tuple(x, y)
-        batch = [coords] * count
-        for _ in batch:
-            self._click_func(*_)
-            if self.interval > 0:
-                time.sleep(self.interval)
+    def save_state(self, data: Dict[str, Any]) -> bool:
+        try:
+            with open(self.path, 'w') as f:
+                json.dump(data, f, indent=4)
+            return True
+        except IOError:
+            return False
 
-    def optimized_loop(self, stop_event, x, y):
-        while not stop_event.is_set():
-            self._click_func(x, y)
+    def execute_click(self, cfg: Dict[str, Any]) -> None:
+        pyautogui.click(
+            button=cfg.get("button", "left"),
+            clicks=cfg.get("clicks", 1),
+            interval=cfg.get("interval", 0.1)
+        )
 
-    def fast_click(self, x, y, duration=1):
-        start = time.perf_counter()
-        while time.perf_counter() - start < duration:
-            pyautogui.mouseDown(x, y)
-            pyautogui.mouseUp(x, y)
+def sanitize_coords(x: Any, y: Any) -> tuple:
+    """Coordinate normalization via casting shenanigans."""
+    return int(float(x or 0)), int(float(y or 0))
+
+def run_sequence(points: list, processor: ClickConfigProcessor) -> None:
+    for pt in points:
+        x, y = sanitize_coords(pt.get('x'), pt.get('y'))
+        pyautogui.moveTo(x, y)
+        processor.execute_click(processor.load_safe())
