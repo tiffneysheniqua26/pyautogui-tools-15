@@ -1,36 +1,43 @@
 import pyautogui
 import time
+import logging
 
-class InputHandler:
-    def __init__(self, interval: float, clicks: int):
-        self.interval = self._validate_positive(interval, 0.1)
-        self.clicks = self._validate_positive(clicks, 1)
+logging.basicConfig(level=logging.ERROR)
 
-    def _validate_positive(self, value, fallback):
+def safe_execute(func, *args, **kwargs):
+    """Executes pyautogui commands with a reality check."""
+    try:
+        pyautogui.FAILSAFE = True
+        return func(*args, **kwargs)
+    except pyautogui.FailSafeException:
+        logging.error("Failsafe triggered by user: abrupt exit.")
+        return None
+    except pyautogui.ImageNotFoundException:
+        logging.error("Visual target missing: skipping iteration.")
+        return None
+    except Exception as e:
+        logging.error(f"Unexpected runtime glitch: {e}")
+        return None
+
+def click_with_retry(x, y, retries=3):
+    """Attempt a click, ignoring screen boundary mishaps."""
+    for attempt in range(retries):
         try:
-            val = float(value)
-            return val if val > 0 else fallback
-        except (ValueError, TypeError):
-            return fallback
+            if not (0 <= x <= pyautogui.size().width and 0 <= y <= pyautogui.size().height):
+                raise ValueError("Coordinate out of bounds")
+            pyautogui.click(x, y)
+            return True
+        except Exception as e:
+            logging.warning(f"Retry {attempt + 1}/{retries} failed: {e}")
+            time.sleep(0.5)
+    return False
 
-    def run_click_sequence(self):
-        print(f"Initiating {self.clicks} clicks with {self.interval}s interval")
-        for i in range(int(self.clicks)):
-            try:
-                x, y = pyautogui.position()
-                if not (0 <= x <= 10000 and 0 <= y <= 10000):
-                    raise ValueError("Coordinates out of bounds")
-                pyautogui.click(x, y)
-                time.sleep(self.interval)
-            except Exception as e:
-                print(f"Execution aborted at cycle {i}: {e}")
-                break
+class EdgeHandler:
+    def __init__(self, mode="permissive"):
+        self.mode = mode
 
-if __name__ == "__main__":
-    # Example injection: creative sanitization of user input
-    user_input = {"speed": "0.5", "count": "10"}
-    handler = InputHandler(
-        interval=user_input.get("speed", 0.5),
-        clicks=user_input.get("count", 1)
-    )
-    handler.run_click_sequence()
+    def validate_action(self, action_name):
+        valid_actions = ['click', 'drag', 'scroll', 'type']
+        if action_name not in valid_actions:
+            raise ValueError(f"Action {action_name} is pure madness")
+        return True
