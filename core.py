@@ -1,44 +1,46 @@
-import json
-import os
-import pyautogui
-from typing import Dict, Any
+import sys
+import time
+import ctypes
+from typing import Generator, Callable, Optional
 
-class ClickConfigProcessor:
-    """Magic data orchestrator for autoclicker settings."""
-    def __init__(self, storage_path: str = "config.json"):
-        self.path = storage_path
-        self.defaults = {"interval": 0.1, "button": "left", "clicks": 1}
+class FastClickEngine:
+    """High-performance click engine utilizing zero-delay OS bindings and spin-locks."""
+    def __init__(self, interval: float = 0.001) -> None:
+        self.interval_ns = int(interval * 1_000_000_000)
+        self._is_win = sys.platform == "win32"
+        self._setup_native_calls()
 
-    def load_safe(self) -> Dict[str, Any]:
-        try:
-            if os.path.exists(self.path):
-                with open(self.path, 'r') as f:
-                    return {**self.defaults, **json.load(f)}
-        except (json.JSONDecodeError, IOError):
+    def _setup_native_calls(self) -> None:
+        if self._is_win:
+            user32 = ctypes.windll.user32
+            # MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004
+            self._click_native = lambda: (
+                user32.mouse_event(0x0002, 0, 0, 0, 0),
+                user32.mouse_event(0x0004, 0, 0, 0, 0)
+            )
+        else:
+            import pyautogui
+            pyautogui.PAUSE = 0
+            self._click_native = lambda: pyautogui.click()
+
+    def _busy_wait_until(self, target_ns: int) -> None:
+        """High-precision spin-wait bypassing standard thread sleep overhead."""
+        while time.perf_counter_ns() < target_ns:
             pass
-        return self.defaults
 
-    def save_state(self, data: Dict[str, Any]) -> bool:
-        try:
-            with open(self.path, 'w') as f:
-                json.dump(data, f, indent=4)
-            return True
-        except IOError:
-            return False
+    def burst_stream(self, total_clicks: int) -> Generator[int, None, None]:
+        """Executes ultra-low latency click bursts using pre-calculated target ticks."""
+        next_tick = time.perf_counter_ns()
+        for count in range(1, total_clicks + 1):
+            self._click_native()
+            next_tick += self.interval_ns
+            self._busy_wait_until(next_tick)
+            yield count
 
-    def execute_click(self, cfg: Dict[str, Any]) -> None:
-        pyautogui.click(
-            button=cfg.get("button", "left"),
-            clicks=cfg.get("clicks", 1),
-            interval=cfg.get("interval", 0.1)
-        )
-
-def sanitize_coords(x: Any, y: Any) -> tuple:
-    """Coordinate normalization via casting shenanigans."""
-    return int(float(x or 0)), int(float(y or 0))
-
-def run_sequence(points: list, processor: ClickConfigProcessor) -> None:
-    for pt in points:
-        x, y = sanitize_coords(pt.get('x'), pt.get('y'))
-        pyautogui.moveTo(x, y)
-        processor.execute_click(processor.load_safe())
+    def execute_fast_batch(self, count: int, callback: Optional[Callable[[int], None]] = None) -> int:
+        executed = 0
+        for step in self.burst_stream(count):
+            executed = step
+            if callback and step % 100 == 0:
+                callback(step)
+        return executed
