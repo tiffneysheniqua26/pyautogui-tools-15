@@ -1,46 +1,52 @@
-import sys
+import random
 import time
-import ctypes
-from typing import Generator, Callable, Optional
+from typing import List, Tuple
+import pyautogui
 
-class FastClickEngine:
-    """High-performance click engine utilizing zero-delay OS bindings and spin-locks."""
-    def __init__(self, interval: float = 0.001) -> None:
-        self.interval_ns = int(interval * 1_000_000_000)
-        self._is_win = sys.platform == "win32"
-        self._setup_native_calls()
 
-    def _setup_native_calls(self) -> None:
-        if self._is_win:
-            user32 = ctypes.windll.user32
-            # MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004
-            self._click_native = lambda: (
-                user32.mouse_event(0x0002, 0, 0, 0, 0),
-                user32.mouse_event(0x0004, 0, 0, 0, 0)
-            )
-        else:
-            import pyautogui
-            pyautogui.PAUSE = 0
-            self._click_native = lambda: pyautogui.click()
+class SafeClickerEngine:
+    """Resilient autoclicker engine dealing with edge cases like resolution shifts and failsafes."""
 
-    def _busy_wait_until(self, target_ns: int) -> None:
-        """High-precision spin-wait bypassing standard thread sleep overhead."""
-        while time.perf_counter_ns() < target_ns:
-            pass
+    def __init__(self, retries: int = 3, safety_margin: int = 5):
+        self.retries = retries
+        self.safety_margin = safety_margin
+        pyautogui.FAILSAFE = True
 
-    def burst_stream(self, total_clicks: int) -> Generator[int, None, None]:
-        """Executes ultra-low latency click bursts using pre-calculated target ticks."""
-        next_tick = time.perf_counter_ns()
-        for count in range(1, total_clicks + 1):
-            self._click_native()
-            next_tick += self.interval_ns
-            self._busy_wait_until(next_tick)
-            yield count
+    def sanitize_coordinates(self, x: int, y: int) -> Tuple[int, int]:
+        screen_w, screen_h = pyautogui.size()
+        clamped_x = max(self.safety_margin, min(x, screen_w - self.safety_margin))
+        clamped_y = max(self.safety_margin, min(y, screen_h - self.safety_margin))
+        return clamped_x, clamped_y
 
-    def execute_fast_batch(self, count: int, callback: Optional[Callable[[int], None]] = None) -> int:
-        executed = 0
-        for step in self.burst_stream(count):
-            executed = step
-            if callback and step % 100 == 0:
-                callback(step)
-        return executed
+    def safe_click(
+        self, x: int, y: int, button: str = "left", delay: float = 0.05
+    ) -> bool:
+        for attempt in range(self.retries):
+            try:
+                cx, cy = self.sanitize_coordinates(x, y)
+                pyautogui.moveTo(cx, cy, duration=0.01)
+                pyautogui.click(button=button)
+                time.sleep(delay + random.uniform(0.001, 0.01))
+                return True
+            except pyautogui.FailSafeException:
+                # Corner trigger fail-safe protection recovery
+                time.sleep(0.5)
+                screen_w, screen_h = pyautogui.size()
+                pyautogui.moveTo(screen_w // 2, screen_h // 2)
+                return False
+            except Exception as exc:
+                if attempt == self.retries - 1:
+                    print(f"Failed click execution at ({x}, {y}): {exc}")
+                    return False
+                time.sleep(0.1 * (attempt + 1))
+        return False
+
+
+def run_click_batch(points: List[Tuple[int, int]], count: int = 10) -> int:
+    engine = SafeClickerEngine()
+    completed = 0
+    for _ in range(count):
+        for px, py in points:
+            if engine.safe_click(px, py):
+                completed += 1
+    return completed
