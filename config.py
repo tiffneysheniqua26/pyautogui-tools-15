@@ -1,63 +1,33 @@
-import json
-from pathlib import Path
-from typing import Any, Dict
+from typing import Dict, Any, Union
+from dataclasses import dataclass
 
-AUTOCLICKER_DEFAULTS: Dict[str, Any] = {
-    "cps": 10.0,
-    "button": "left",
-    "hotkey": "f8",
-    "jitter_px": 2,
-    "max_clicks": 0,
-    "target_region": None,
-    "sound_feedback": True,
-}
+@dataclass
+class ClickConfig:
+    """Configuration schema for click automation events."""
+    interval: float
+    button: str
+    jitter: bool
 
+def get_default_config() -> Dict[str, Union[float, str, bool]]:
+    """Factory method for default runtime parameters."""
+    return {
+        "interval": 0.01,
+        "button": "left",
+        "jitter": True,
+        "emergency_stop": "f9"
+    }
 
-class DynamicConfigLoader:
-    """Cascading configuration manager for autoclicker runtime settings."""
+class ConfigRegistry:
+    """Global store for clicker state persistence."""
+    def __init__(self) -> None:
+        self._store: Dict[str, Any] = get_default_config()
 
-    def __init__(self, config_path: str = "autoclicker_config.json"):
-        self._path = Path(config_path)
-        self._data = dict(AUTOCLICKER_DEFAULTS)
-        self.reload()
+    def update(self, key: str, value: Any) -> None:
+        """Safe setter for registry entries."""
+        self._store[key] = value
 
-    def reload(self) -> None:
-        if self._path.exists():
-            try:
-                with open(self._path, "r", encoding="utf-8") as f:
-                    user_cfg = json.load(f)
-                    if isinstance(user_cfg, dict):
-                        self._data.update(
-                            {
-                                k: v
-                                for k, v in user_cfg.items()
-                                if k in AUTOCLICKER_DEFAULTS
-                            }
-                        )
-            except (json.JSONDecodeError, OSError):
-                pass
-        self.sync()
+    def get(self, key: str) -> Any:
+        """Safe getter for registry entries."""
+        return self._store.get(key)
 
-    def sync(self) -> None:
-        try:
-            with open(self._path, "w", encoding="utf-8") as f:
-                json.dump(self._data, f, indent=4)
-        except OSError:
-            pass
-
-    def __getattr__(self, name: str) -> Any:
-        if name in self._data:
-            return self._data[name]
-        raise AttributeError(f"Configuration option '{name}' is not defined.")
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name.startswith("_"):
-            super().__setattr__(name, value)
-        elif name in AUTOCLICKER_DEFAULTS:
-            self._data[name] = value
-            self.sync()
-        else:
-            raise KeyError(f"Invalid configuration key: '{name}'")
-
-    def as_dict(self) -> Dict[str, Any]:
-        return dict(self._data)
+registry: ConfigRegistry = ConfigRegistry()
