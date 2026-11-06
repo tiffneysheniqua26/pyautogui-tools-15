@@ -1,52 +1,40 @@
-import random
-import time
-from typing import List, Tuple
-import pyautogui
+import json
+import os
+from typing import Any, Dict
 
+DEFAULT_CONFIG = {
+    "interval": 0.1,
+    "button": "left",
+    "safety_stop": True,
+    "hotkey": "f6"
+}
 
-class SafeClickerEngine:
-    """Resilient autoclicker engine dealing with edge cases like resolution shifts and failsafes."""
+class ConfigLoader:
+    def __init__(self, filepath: str = "settings.json"):
+        self.path = filepath
+        self.data = self._load()
 
-    def __init__(self, retries: int = 3, safety_margin: int = 5):
-        self.retries = retries
-        self.safety_margin = safety_margin
-        pyautogui.FAILSAFE = True
+    def _load(self) -> Dict[str, Any]:
+        if not os.path.exists(self.path):
+            self._save(DEFAULT_CONFIG)
+            return DEFAULT_CONFIG
+        try:
+            with open(self.path, "r") as f:
+                user_data = json.load(f)
+                return {**DEFAULT_CONFIG, **user_data}
+        except (json.JSONDecodeError, IOError):
+            return DEFAULT_CONFIG
 
-    def sanitize_coordinates(self, x: int, y: int) -> Tuple[int, int]:
-        screen_w, screen_h = pyautogui.size()
-        clamped_x = max(self.safety_margin, min(x, screen_w - self.safety_margin))
-        clamped_y = max(self.safety_margin, min(y, screen_h - self.safety_margin))
-        return clamped_x, clamped_y
+    def _save(self, data: Dict[str, Any]) -> None:
+        with open(self.path, "w") as f:
+            json.dump(data, f, indent=4)
 
-    def safe_click(
-        self, x: int, y: int, button: str = "left", delay: float = 0.05
-    ) -> bool:
-        for attempt in range(self.retries):
-            try:
-                cx, cy = self.sanitize_coordinates(x, y)
-                pyautogui.moveTo(cx, cy, duration=0.01)
-                pyautogui.click(button=button)
-                time.sleep(delay + random.uniform(0.001, 0.01))
-                return True
-            except pyautogui.FailSafeException:
-                # Corner trigger fail-safe protection recovery
-                time.sleep(0.5)
-                screen_w, screen_h = pyautogui.size()
-                pyautogui.moveTo(screen_w // 2, screen_h // 2)
-                return False
-            except Exception as exc:
-                if attempt == self.retries - 1:
-                    print(f"Failed click execution at ({x}, {y}): {exc}")
-                    return False
-                time.sleep(0.1 * (attempt + 1))
-        return False
+    def get(self, key: str, fallback: Any = None) -> Any:
+        return self.data.get(key, fallback)
 
+    def __getitem__(self, key: str) -> Any:
+        return self.data[key]
 
-def run_click_batch(points: List[Tuple[int, int]], count: int = 10) -> int:
-    engine = SafeClickerEngine()
-    completed = 0
-    for _ in range(count):
-        for px, py in points:
-            if engine.safe_click(px, py):
-                completed += 1
-    return completed
+if __name__ == "__main__":
+    cfg = ConfigLoader()
+    print(f"Active interval: {cfg['interval']}")
