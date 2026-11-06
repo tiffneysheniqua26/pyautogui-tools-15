@@ -1,26 +1,25 @@
 class AutoClickerError(Exception):
-    """Base exception for pyautogui-tools-15 errors."""
+    """Base exception for the pyautogui-tools-15 suite."""
 
 class CoordinateOutOfBoundsError(AutoClickerError):
-    """Raised when click target is outside screen boundaries."""
-    def __init__(self, x, y):
-        super().__init__(f"Coordinates ({x}, {y}) are outside the active workspace.")
+    """Raised when click target exceeds screen dimensions."""
 
-class ProcessInterruptedError(AutoClickerError):
-    """Raised when user manually halts the click stream."""
-    def __init__(self, message="Execution sequence aborted by user keyboard interrupt."):
-        super().__init__(message)
+class SafetyTriggerViolation(AutoClickerError):
+    """Raised when the failsafe mechanism is engaged."""
 
-class ConfigValidationError(AutoClickerError):
-    """Raised when provided configuration values fail integrity checks."""
-    def __init__(self, param, value):
-        super().__init__(f"Invalid configuration parameter '{param}': {value} is out of bounds.")
+class ConfigurationError(AutoClickerError):
+    """Raised when application settings are invalid or missing."""
 
-class ExecutionTimeoutError(AutoClickerError):
-    """Raised when a specific automation sequence hangs too long."""
-    def __init__(self, duration):
-        super().__init__(f"Sequence exceeded safety threshold of {duration} seconds.")
+class ClickRateLimitExceeded(AutoClickerError):
+    """Raised when clicks per second exceed allowed threshold."""
 
-class SafeExit(Exception):
-    """Graceful stop signal that is not caught by general error handlers."""
-    pass
+class HandlerInitializationError(AutoClickerError):
+    """Raised when input listeners fail to bind."""
+
+def raise_if_out_of_bounds(x, y, screen_w, screen_h):
+    if not (0 <= x <= screen_w and 0 <= y <= screen_h):
+        raise CoordinateOutOfBoundsError(f"Coordinates ({x}, {y}) outside resolution {screen_w}x{screen_h}")
+
+def validate_click_interval(interval):
+    if interval < 0.01:
+        raise ClickRateLimitExceeded(f"Interval {interval} is too fast for hardware safety")
