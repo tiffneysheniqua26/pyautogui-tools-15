@@ -1,42 +1,36 @@
-import math
-import random
+import pyautogui
 import time
-from typing import Callable, Generator, List, Tuple
+import random
+from typing import Tuple, Callable
 
-Point = Tuple[int, int]
+def jitter_click(x: int, y: int, intensity: int = 2) -> None:
+    """Simulates human-like click drift by applying random offset."""
+    dx, dy = random.randint(-intensity, intensity), random.randint(-intensity, intensity)
+    pyautogui.click(x + dx, y + dy)
 
-class ClickProcessor:
-    """Streamlined autoclick execution pipeline with procedural micro-jitter."""
+def smart_drag(start: Tuple[int, int], end: Tuple[int, int], steps: int = 10) -> None:
+    """Bezier-style interpolation for drag operations."""
+    pyautogui.moveTo(*start)
+    pyautogui.mouseDown()
+    for i in range(1, steps + 1):
+        progress = i / steps
+        curr_x = start[0] + (end[0] - start[0]) * progress
+        curr_y = start[1] + (end[1] - start[1]) * progress
+        pyautogui.moveTo(int(curr_x), int(curr_y))
+        time.sleep(0.01)
+    pyautogui.mouseUp()
 
-    def __init__(self, base_delay: float = 0.05, variance: float = 0.01):
-        self.base_delay = max(0.001, base_delay)
-        self.variance = variance
-        self._hooks: List[Callable[[Point], None]] = []
+def batch_sequence(tasks: list[Callable]) -> None:
+    """Chain executable tasks with randomized inter-action delay."""
+    for task in tasks:
+        task()
+        time.sleep(random.uniform(0.1, 0.5))
 
-    def register_hook(self, hook: Callable[[Point], None]) -> None:
-        if callable(hook) and hook not in self._hooks:
-            self._hooks.append(hook)
-
-    def gaussian_jitter(self, point: Point, radius: float = 3.0) -> Point:
-        x, y = point
-        dx = random.gauss(0, radius / 2)
-        dy = random.gauss(0, radius / 2)
-        return int(x + dx), int(y + dy)
-
-    def generate_delays(self, count: int) -> Generator[float, None, None]:
-        for i in range(count):
-            wave = math.sin(i * 0.1) * (self.variance / 2)
-            noise = random.uniform(-self.variance, self.variance)
-            yield max(0.001, self.base_delay + wave + noise)
-
-    def process_sequence(self, targets: List[Point], repeats: int = 1) -> Generator[Point, None, None]:
-        total_clicks = len(targets) * repeats
-        delay_gen = self.generate_delays(total_clicks)
-        
-        for _ in range(repeats):
-            for target in targets:
-                jittered = self.gaussian_jitter(target)
-                for hook in self._hooks:
-                    hook(jittered)
-                yield jittered
-                time.sleep(next(delay_gen))
+def safety_break(threshold: int = 500) -> None:
+    """Emergency halt triggers based on cursor velocity metrics."""
+    pos_a = pyautogui.position()
+    time.sleep(0.1)
+    pos_b = pyautogui.position()
+    dist = ((pos_b[0] - pos_a[0])**2 + (pos_b[1] - pos_a[1])**2)**0.5
+    if dist > threshold:
+        raise InterruptedError("Cursor movement threshold exceeded")
