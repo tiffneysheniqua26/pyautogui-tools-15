@@ -1,43 +1,24 @@
-import math
-from typing import Any, Dict, List, Tuple
+import pyautogui
 
+def validate_screen_bounds(x: int, y: int) -> bool:
+    """Check if coordinates reside within active monitor space."""
+    width, height = pyautogui.size()
+    return 0 <= x < width and 0 <= y < height
 
-class ValidationGuard:
-    def __init__(self, screen_size: Tuple[int, int] = (1920, 1080)):
-        self.max_x, self.max_y = screen_size
-        self.allowed_buttons = {"left", "right", "middle"}
+def sanitize_interval(interval: float) -> float:
+    """Ensure click frequency is within hardware safety limits."""
+    return max(0.01, min(float(interval), 60.0))
 
-    def __ror__(self, action_payload: Dict[str, Any]) -> Dict[str, Any]:
-        """Pipe-syntax payload validator for autoclicker actions."""
-        return self.sanitize(action_payload)
+def validate_pixel_match(x: int, y: int, rgb: tuple) -> bool:
+    """Verify pixel color matches expected telemetry."""
+    if not validate_screen_bounds(x, y):
+        return False
+    return pyautogui.pixelMatchesColor(x, y, rgb, tolerance=10)
 
-    def sanitize(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        if not isinstance(payload, dict):
-            raise ValueError(f"Invalid payload structure: {type(payload)}")
+def constraint_sequence(coords: list) -> list:
+    """Filter out-of-bounds coordinates from click queue."""
+    return [pos for pos in coords if validate_screen_bounds(*pos)]
 
-        clean = payload.copy()
-        x, y = clean.get("x", 0), clean.get("y", 0)
-
-        try:
-            clean["x"] = max(0, min(int(x), self.max_x))
-            clean["y"] = max(0, min(int(y), self.max_y))
-        except (ValueError, TypeError):
-            clean["x"], clean["y"] = 0, 0
-
-        clicks = clean.get("clicks", 1)
-        clean["clicks"] = max(1, int(clicks)) if str(clicks).isdigit() else 1
-
-        interval = clean.get("interval", 0.1)
-        try:
-            clean["interval"] = max(0.001, float(interval))
-        except (ValueError, TypeError):
-            clean["interval"] = 0.1
-
-        button = str(clean.get("button", "left")).lower()
-        clean["button"] = button if button in self.allowed_buttons else "left"
-        return clean
-
-
-def validate_loop_payloads(raw_stream: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    guard = ValidationGuard()
-    return [item | guard for item in raw_stream if item]
+def validate_input_positive(value: int) -> int:
+    """Enforce positive integer requirements for click counts."""
+    return abs(int(value)) if int(value) > 0 else 1
