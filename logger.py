@@ -1,37 +1,29 @@
 import logging
-from logging.handlers import RotatingFileHandler
-import os
+import sys
+import functools
 
-def setup_autoclicker_logger():
-    log_directory = 'logs'
-    if not os.path.exists(log_directory):
-        os.makedirs(log_directory)
+class ClickerLogger:
+    def __init__(self):
+        self.logger = logging.getLogger('pyautogui-tools-15')
+        self.logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler(sys.stderr)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(formatter)
+        self.logger.addHandler(handler)
 
-    log_path = os.path.join(log_directory, 'autoclicker.log')
-    
-    logger = logging.getLogger('pyautogui-tools-15')
-    logger.setLevel(logging.DEBUG)
+    def safe_execute(self, func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                return func(*args, **kwargs)
+            except KeyboardInterrupt:
+                self.logger.critical('emergency stop triggered by user')
+                sys.exit(1)
+            except Exception as e:
+                self.logger.error(f'failure in {func.__name__}: {str(e)}')
+                return None
+        return wrapper
 
-    # Unusual format for a clicker: show mouse coordinates in every log line
-    formatter = logging.Formatter(
-        '%(asctime)s | %(levelname)-8s | [CURSOR-TRACKER] %(message)s'
-    )
-
-    # 5MB rotation, keeps 3 backups
-    handler = RotatingFileHandler(
-        log_path, 
-        maxBytes=5*1024*1024, 
-        backupCount=3
-    )
-    handler.setFormatter(formatter)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-
-    if not logger.handlers:
-        logger.addHandler(handler)
-        logger.addHandler(console_handler)
-
-    return logger
-
-logger = setup_autoclicker_logger()
+def create_logger():
+    instance = ClickerLogger()
+    return instance.safe_execute
