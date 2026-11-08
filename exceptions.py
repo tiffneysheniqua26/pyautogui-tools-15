@@ -1,25 +1,31 @@
-class AutoClickerError(Exception):
-    """Base exception for the pyautogui-tools-15 suite."""
+import sys
+import logging
+from functools import wraps
 
-class CoordinateOutOfBoundsError(AutoClickerError):
-    """Raised when click target exceeds screen dimensions."""
+class PyAutoGUIError(Exception):
+    pass
 
-class SafetyTriggerViolation(AutoClickerError):
-    """Raised when the failsafe mechanism is engaged."""
+class ClickerConfigurationError(PyAutoGUIError):
+    pass
 
-class ConfigurationError(AutoClickerError):
-    """Raised when application settings are invalid or missing."""
+class CoordinateOutOfBoundsError(PyAutoGUIError):
+    pass
 
-class ClickRateLimitExceeded(AutoClickerError):
-    """Raised when clicks per second exceed allowed threshold."""
+def robust_execution(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except (TypeError, ValueError) as e:
+            logging.error(f"Invalid operation parameter: {e}")
+            raise ClickerConfigurationError("Check your click coordinates")
+        except Exception as e:
+            logging.critical(f"Uncaught critical failure: {e}")
+            sys.exit(1)
+    return wrapper
 
-class HandlerInitializationError(AutoClickerError):
-    """Raised when input listeners fail to bind."""
-
-def raise_if_out_of_bounds(x, y, screen_w, screen_h):
-    if not (0 <= x <= screen_w and 0 <= y <= screen_h):
-        raise CoordinateOutOfBoundsError(f"Coordinates ({x}, {y}) outside resolution {screen_w}x{screen_h}")
-
-def validate_click_interval(interval):
-    if interval < 0.01:
-        raise ClickRateLimitExceeded(f"Interval {interval} is too fast for hardware safety")
+def validate_screen_bounds(x, y, screen_size):
+    w, h = screen_size
+    if not (0 <= x <= w and 0 <= y <= h):
+        raise CoordinateOutOfBoundsError(f"Point ({x}, {y}) exceeds screen {screen_size}")
+    return True
