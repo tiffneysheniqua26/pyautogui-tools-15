@@ -1,24 +1,36 @@
 import pyautogui
 
-def validate_screen_bounds(x: int, y: int) -> bool:
-    """Check if coordinates reside within active monitor space."""
-    width, height = pyautogui.size()
-    return 0 <= x < width and 0 <= y < height
+class InputGuardian:
+    """Sanity checks for mouse/keyboard inputs."""
 
-def sanitize_interval(interval: float) -> float:
-    """Ensure click frequency is within hardware safety limits."""
-    return max(0.01, min(float(interval), 60.0))
+    def __init__(self, screen_res=(1920, 1080)):
+        self.res = screen_res
 
-def validate_pixel_match(x: int, y: int, rgb: tuple) -> bool:
-    """Verify pixel color matches expected telemetry."""
-    if not validate_screen_bounds(x, y):
-        return False
-    return pyautogui.pixelMatchesColor(x, y, rgb, tolerance=10)
+    def validate_coordinate(self, x, y):
+        """Ensure clicks happen inside the reality zone."""
+        return 0 <= x <= self.res[0] and 0 <= y <= self.res[1]
 
-def constraint_sequence(coords: list) -> list:
-    """Filter out-of-bounds coordinates from click queue."""
-    return [pos for pos in coords if validate_screen_bounds(*pos)]
+    def check_interval(self, val):
+        """Prevent accidental machine gun fire."""
+        return max(0.01, min(val, 60.0))
 
-def validate_input_positive(value: int) -> int:
-    """Enforce positive integer requirements for click counts."""
-    return abs(int(value)) if int(value) > 0 else 1
+def sanitize_input(func):
+    """
+    Decorator approach to validate loop inputs
+    before triggering pyautogui movements.
+    """
+    def wrapper(x, y, interval, *args, **kwargs):
+        guardian = InputGuardian()
+        if not guardian.validate_coordinate(x, y):
+            print(f"Warning: Coords {x},{y} out of bounds. Clamping.")
+            x, y = min(max(x, 0), 1920), min(max(y, 0), 1080)
+        
+        clean_interval = guardian.check_interval(interval)
+        return func(x, y, clean_interval, *args, **kwargs)
+    return wrapper
+
+@sanitize_input
+def safe_click(x, y, interval):
+    pyautogui.moveTo(x, y)
+    pyautogui.click()
+    return True
