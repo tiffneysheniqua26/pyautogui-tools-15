@@ -1,29 +1,32 @@
 import logging
 import sys
-import functools
+from datetime import datetime
 
-class ClickerLogger:
-    def __init__(self):
-        self.logger = logging.getLogger('pyautogui-tools-15')
+class ClickLogger:
+    def __init__(self, name='pyautogui-tools-15'):
+        self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.DEBUG)
-        handler = logging.StreamHandler(sys.stderr)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        self.logger.addHandler(handler)
+        
+        fmt = logging.Formatter(
+            '%(asctime)s | %(levelname)-8s | %(message)s',
+            datefmt='%H:%M:%S'
+        )
 
-    def safe_execute(self, func):
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            try:
-                return func(*args, **kwargs)
-            except KeyboardInterrupt:
-                self.logger.critical('emergency stop triggered by user')
-                sys.exit(1)
-            except Exception as e:
-                self.logger.error(f'failure in {func.__name__}: {str(e)}')
-                return None
-        return wrapper
+        console = logging.StreamHandler(sys.stdout)
+        console.setFormatter(fmt)
+        self.logger.addHandler(console)
 
-def create_logger():
-    instance = ClickerLogger()
-    return instance.safe_execute
+    def log_action(self, msg: str):
+        self.logger.info(f'[ACTION] {msg}')
+
+    def log_error(self, msg: str):
+        self.logger.error(f'[FAILURE] {msg}')
+
+    def log_performance(self, duration: float):
+        self.logger.debug(f'[METRIC] execution took {duration:.4f}s')
+
+# Singleton pattern for global access
+logger_instance = ClickLogger()
+
+def get_logger():
+    return logger_instance
