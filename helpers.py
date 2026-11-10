@@ -1,57 +1,40 @@
-import struct
-from dataclasses import dataclass
-from typing import Iterator, List, Tuple
+import random
+import time
+from typing import Generator, List, Tuple
 
 
-@dataclass
-class ClickEvent:
-    x: int
-    y: int
-    delay: float
-    button: str = "left"
-    clicks: int = 1
+def generate_human_path(
+    start: Tuple[int, int], end: Tuple[int, int], steps: int = 15
+) -> Generator[Tuple[int, int], None, None]:
+    """Generates non-linear trajectory coordinates with organic micro-jitter."""
+    x1, y1 = start
+    x2, y2 = end
+
+    cx = (x1 + x2) / 2.0 + random.randint(-35, 35)
+    cy = (y1 + y2) / 2.0 + random.randint(-35, 35)
+
+    for i in range(steps + 1):
+        t = i / float(steps)
+        x = (1 - t) ** 2 * x1 + 2 * (1 - t) * t * cx + t**2 * x2
+        y = (1 - t) ** 2 * y1 + 2 * (1 - t) * t * cy + t**2 * y2
+
+        jitter_x = random.uniform(-1.2, 1.2) if 0 < i < steps else 0.0
+        jitter_y = random.uniform(-1.2, 1.2) if 0 < i < steps else 0.0
+
+        yield int(round(x + jitter_x)), int(round(y + jitter_y))
 
 
-class ClickStreamProcessor:
-    """Encodes and decodes dense autoclicker event streams into compact binary chunks."""
+def organic_delay(base_ms: float, jitter_ratio: float = 0.25) -> None:
+    """Executes micro-sleep using Gaussian distribution to simulate human behavior."""
+    sigma = max(1.0, (base_ms * jitter_ratio) / 3.0)
+    delay_ms = max(2.0, random.gauss(base_ms, sigma))
+    time.sleep(delay_ms / 1000.0)
 
-    _BUTTON_MAP = {"left": 0, "right": 1, "middle": 2}
-    _REV_BUTTON_MAP = {v: k for k, v in _BUTTON_MAP.items()}
 
-    def __init__(self, time_precision: int = 1000):
-        self.precision = time_precision
-
-    def encode_events(self, events: List[ClickEvent]) -> bytes:
-        """Packs a list of ClickEvents into a custom compact byte stream."""
-        buffer = bytearray()
-        for ev in events:
-            scaled_delay = int(ev.delay * self.precision)
-            button_code = self._BUTTON_MAP.get(ev.button.lower(), 0)
-            packed = struct.pack("<HHIBB", ev.x & 0xFFFF, ev.y & 0xFFFF, scaled_delay, button_code, ev.clicks & 0xFF)
-            buffer.extend(packed)
-        return bytes(buffer)
-
-    def decode_events(self, raw_data: bytes) -> Iterator[ClickEvent]:
-        """Yields ClickEvent instances parsed from binary raw byte data."""
-        record_size = struct.calcsize("<HHIBB")
-        for offset in range(0, len(raw_data) - record_size + 1, record_size):
-            chunk = raw_data[offset:offset + record_size]
-            x, y, scaled_delay, button_code, clicks = struct.unpack("<HHIBB", chunk)
-            yield ClickEvent(
-                x=x,
-                y=y,
-                delay=scaled_delay / self.precision,
-                button=self._REV_BUTTON_MAP.get(button_code, "left"),
-                clicks=clicks
-            )
-
-    @staticmethod
-    def calculate_jitter(events: List[ClickEvent]) -> Tuple[float, float]:
-        """Calculates spatial variance across a recording sequence."""
-        if not events:
-            return (0.0, 0.0)
-        avg_x = sum(e.x for e in events) / len(events)
-        avg_y = sum(e.y for e in events) / len(events)
-        var_x = sum((e.x - avg_x) ** 2 for e in events) / len(events)
-        var_y = sum((e.y - avg_y) ** 2 for e in events) / len(events)
-        return (var_x ** 0.5, var_y ** 0.5)
+def calculate_cps(click_timestamps: List[float], sample_size: int = 10) -> float:
+    """Calculates moving clicks-per-second rate over recent execution history."""
+    recent = click_timestamps[-sample_size:]
+    if len(recent) < 2:
+        return 0.0
+    time_span = recent[-1] - recent[0]
+    return (len(recent) - 1) / time_span if time_span > 0 else 0.0
