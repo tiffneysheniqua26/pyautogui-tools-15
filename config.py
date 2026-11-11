@@ -1,67 +1,77 @@
 import json
 import os
+from collections import ChainMap
 from pathlib import Path
-from typing import Any, Dict, Union
+from typing import Any, Dict
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "cps": 10.0,
     "button": "left",
-    "hotkey": "f6",
-    "jitter_ms": 15,
     "click_type": "single",
+    "hotkey": "f6",
+    "random_jitter_ms": 15,
     "max_clicks": 0,
-    "safe_mode": True,
-    "target_region": None,
+    "fail_safe": True,
+    "sound_feedback": False,
 }
 
 
-class ConfigProxy:
-    """Dynamic configuration wrapper with fallback defaults and env overrides."""
+class DynamicConfigLoader:
+    """A persistent configuration loader backed by dynamic ChainMap lookups."""
 
-    def __init__(self, config_path: Union[str, Path] = "autoclick_config.json"):
-        self._path = Path(config_path)
-        self._store: Dict[str, Any] = {}
-        self.reload()
+    def __init__(
+        self, filepath: str = "autoclicker_config.json", env_prefix: str = "CLICKER_"
+    ):
+        self.filepath = Path(filepath)
+        self.env_prefix = env_prefix
+        self._file_data: Dict[str, Any] = {}
+        self.load()
 
-    def reload(self) -> None:
-        raw_data = {}
-        if self._path.exists():
+    def _env_override(self) -> Dict[str, Any]:
+        overrides = {}
+        for key in DEFAULT_CONFIG:
+            env_key = f"{self.env_prefix}{key.upper()}"
+            if env_key in os.environ:
+                val = os.environ[env_key]
+                if val.isdigit():
+                    overrides[key] = int(val)
+                elif val.replace(".", "", 1).isdigit():
+                    overrides[key] = float(val)
+                elif val.lower() in ("true", "false"):
+                    overrides[key] = val.lower() == "true"
+                else:
+                    overrides[key] = val
+        return overrides
+
+    def load(self) -> "DynamicConfigLoader":
+        if self.filepath.exists():
             try:
-                with open(self._path, "r", encoding="utf-8") as f:
-                    raw_data = json.load(f)
+                with open(self.filepath, "r", encoding="utf-8") as f:
+                    self._file_data = json.load(f)
             except (json.JSONDecodeError, OSError):
-                raw_data = {}
-        self._store = {**DEFAULT_CONFIG, **raw_data}
-
-    def __getattr__(self, name: str) -> Any:
-        env_key = f"AUTOCLICK_{name.upper()}"
-        if env_key in os.environ:
-            val = os.environ[env_key]
-            if val.isdigit():
-                return int(val)
-            try:
-                return float(val)
-            except ValueError:
-                if val.lower() in ("true", "false"):
-                    return val.lower() == "true"
-                return val
-
-        if name in self._store:
-            return self._store[name]
-        raise AttributeError(f"Configuration option '{name}' not found")
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name.startswith("_"):
-            super().__setattr__(name, value)
-        else:
-            self._store[name] = value
+                self._file_data = {}
+        return self
 
     def save(self) -> None:
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(self._store, f, indent=2)
+        with open(self.filepath, "w", encoding="utf-8") as f:
+            json.dump(dict(self), f, indent=2)
 
-    def to_dict(self) -> Dict[str, Any]:
-        return dict(self._store)
+    @property
+    def _chain(self) -> ChainMap:
+        return ChainMap(self._env_override(), self._file_data, DEFAULT_CONFIG)
 
+    def __getattr__(self, name: str) -> Any:
+        chain = self._chain
+        if name in chain:
+            return chain[name]
+        raise AttributeError(f"Configuration key '{name}' does not exist")
 
-config = ConfigProxy()
+    def __getitem__(self, item: str) -> Any:
+        return getattr(self, item)
+
+    def set(self, key: str, value: Any) -> None:
+        self._file_data[key] = value
+        self.save()
+
+    def __iter__(self):
+        return iter(self._chain)
