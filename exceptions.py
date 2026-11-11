@@ -1,31 +1,28 @@
-import sys
-import logging
-from functools import wraps
+class AutoClickerError(Exception):
+    """Base exception for pyautogui-tools-15."""
 
-class PyAutoGUIError(Exception):
-    pass
+class ClickBoundsError(AutoClickerError):
+    """Raised when coordinates exceed screen dimensions."""
 
-class ClickerConfigurationError(PyAutoGUIError):
-    pass
+class SafetyTriggerError(AutoClickerError):
+    """Raised when fail-safe mouse movement is detected."""
 
-class CoordinateOutOfBoundsError(PyAutoGUIError):
-    pass
+class CoordinateValidator:
+    @staticmethod
+    def validate(x, y, screen_width, screen_height):
+        if not (0 <= x <= screen_width and 0 <= y <= screen_height):
+            raise ClickBoundsError(f"Coordinates ({x}, {y}) out of screen bounds.")
+        return True
 
-def robust_execution(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except (TypeError, ValueError) as e:
-            logging.error(f"Invalid operation parameter: {e}")
-            raise ClickerConfigurationError("Check your click coordinates")
-        except Exception as e:
-            logging.critical(f"Uncaught critical failure: {e}")
-            sys.exit(1)
-    return wrapper
+def safe_execute(func, *args, **kwargs):
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        error_type = type(e).__name__
+        print(f"[!] {error_type} encountered: {e}")
+        return None
 
-def validate_screen_bounds(x, y, screen_size):
-    w, h = screen_size
-    if not (0 <= x <= w and 0 <= y <= h):
-        raise CoordinateOutOfBoundsError(f"Point ({x}, {y}) exceeds screen {screen_size}")
+def validate_pyautogui_state(active, fail_safe=True):
+    if fail_safe and not active:
+        raise SafetyTriggerError("Fail-safe mechanism blocked operation.")
     return True
