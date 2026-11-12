@@ -1,40 +1,56 @@
-import json
-import os
-from typing import Any, Dict
+import time
+import random
+import urllib.request
+import urllib.error
+from typing import Callable, Any, TypeVar
 
-DEFAULT_CONFIG = {
-    "interval": 0.1,
-    "button": "left",
-    "safety_stop": True,
-    "hotkey": "f6"
-}
+F = TypeVar('F', bound=Callable[..., Any])
 
-class ConfigLoader:
-    def __init__(self, filepath: str = "settings.json"):
-        self.path = filepath
-        self.data = self._load()
 
-    def _load(self) -> Dict[str, Any]:
-        if not os.path.exists(self.path):
-            self._save(DEFAULT_CONFIG)
-            return DEFAULT_CONFIG
-        try:
-            with open(self.path, "r") as f:
-                user_data = json.load(f)
-                return {**DEFAULT_CONFIG, **user_data}
-        except (json.JSONDecodeError, IOError):
-            return DEFAULT_CONFIG
+class RemoteSyncError(Exception):
+    """Raised when remote macro configuration fetch fails completely."""
+    pass
 
-    def _save(self, data: Dict[str, Any]) -> None:
-        with open(self.path, "w") as f:
-            json.dump(data, f, indent=4)
 
-    def get(self, key: str, fallback: Any = None) -> Any:
-        return self.data.get(key, fallback)
+def resilient_network_dispatch(
+    max_retries: int = 4,
+    base_delay: float = 0.4,
+    backoff_multiplier: float = 1.8
+):
+    """Decorator wrapping network sync operations with jittered backoff logic."""
+    def decorator(func: F) -> F:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_exception = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except (urllib.error.URLError, TimeoutError, RemoteSyncError) as err:
+                    last_exception = err
+                    if attempt == max_retries:
+                        break
+                    jitter = random.uniform(0.08, 0.25)
+                    sleep_duration = (base_delay * (backoff_multiplier ** (attempt - 1))) + jitter
+                    time.sleep(sleep_duration)
+            raise RemoteSyncError(f"Operation failed after {max_retries} attempts: {last_exception}") from last_exception
+        return wrapper  # type: ignore
+    return decorator
 
-    def __getitem__(self, key: str) -> Any:
-        return self.data[key]
 
-if __name__ == "__main__":
-    cfg = ConfigLoader()
-    print(f"Active interval: {cfg['interval']}")
+class ProfileNetworkManager:
+    """Handles remote click pattern profile synchronization for autoclicker tasks."""
+
+    def __init__(self, remote_url: str = "http://localhost:8901/patterns"):
+        self.remote_url = remote_url
+
+    @resilient_network_dispatch(max_retries=3, base_delay=0.5)
+    def pull_remote_pattern(self, pattern_id: str) -> str:
+        """Fetches remote autoclick payload pattern with retry handling."""
+        target_url = f"{self.remote_url}/{pattern_id}"
+        req = urllib.request.Request(
+            target_url,
+            headers={"User-Agent": "PyAutoGUI-Tools-15/PatternEngine"}
+        )
+        with urllib.request.urlopen(req, timeout=2.5) as response:
+            if response.status != 200:
+                raise RemoteSyncError(f"HTTP status code non-OK: {response.status}")
+            return response.read().decode('utf-8')
