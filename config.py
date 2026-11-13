@@ -1,77 +1,60 @@
 import json
-import os
-from collections import ChainMap
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Union
 
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "cps": 10.0,
+    "click_interval": 0.1,
     "button": "left",
-    "click_type": "single",
-    "hotkey": "f6",
-    "random_jitter_ms": 15,
-    "max_clicks": 0,
-    "fail_safe": True,
-    "sound_feedback": False,
+    "clicks_per_second_max": 20.0,
+    "toggle_hotkey": "f6",
+    "jitter_ms": 15,
+    "enable_failsafe": True,
+    "target_coordinates": None,
 }
 
 
-class DynamicConfigLoader:
-    """A persistent configuration loader backed by dynamic ChainMap lookups."""
+class ConfigManager:
+    """Dynamic configuration loader with persistence and fallback defaults."""
 
-    def __init__(
-        self, filepath: str = "autoclicker_config.json", env_prefix: str = "CLICKER_"
-    ):
-        self.filepath = Path(filepath)
-        self.env_prefix = env_prefix
-        self._file_data: Dict[str, Any] = {}
-        self.load()
+    def __init__(self, path: Union[str, Path] = "autoclicker_config.json"):
+        self.filepath = Path(path)
+        self._data = dict(DEFAULT_CONFIG)
+        self._load_or_bootstrap()
 
-    def _env_override(self) -> Dict[str, Any]:
-        overrides = {}
-        for key in DEFAULT_CONFIG:
-            env_key = f"{self.env_prefix}{key.upper()}"
-            if env_key in os.environ:
-                val = os.environ[env_key]
-                if val.isdigit():
-                    overrides[key] = int(val)
-                elif val.replace(".", "", 1).isdigit():
-                    overrides[key] = float(val)
-                elif val.lower() in ("true", "false"):
-                    overrides[key] = val.lower() == "true"
-                else:
-                    overrides[key] = val
-        return overrides
-
-    def load(self) -> "DynamicConfigLoader":
+    def _load_or_bootstrap(self) -> None:
         if self.filepath.exists():
             try:
                 with open(self.filepath, "r", encoding="utf-8") as f:
-                    self._file_data = json.load(f)
+                    user_data = json.load(f)
+                    if isinstance(user_data, dict):
+                        self._data.update(user_data)
             except (json.JSONDecodeError, OSError):
-                self._file_data = {}
-        return self
+                self._save()
+        else:
+            self._save()
 
-    def save(self) -> None:
-        with open(self.filepath, "w", encoding="utf-8") as f:
-            json.dump(dict(self), f, indent=2)
-
-    @property
-    def _chain(self) -> ChainMap:
-        return ChainMap(self._env_override(), self._file_data, DEFAULT_CONFIG)
+    def _save(self) -> None:
+        try:
+            with open(self.filepath, "w", encoding="utf-8") as f:
+                json.dump(self._data, f, indent=4)
+        except OSError:
+            pass
 
     def __getattr__(self, name: str) -> Any:
-        chain = self._chain
-        if name in chain:
-            return chain[name]
-        raise AttributeError(f"Configuration key '{name}' does not exist")
+        if name in self._data:
+            return self._data[name]
+        raise AttributeError(f"Configuration key '{name}' does not exist.")
 
-    def __getitem__(self, item: str) -> Any:
-        return getattr(self, item)
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in ("filepath", "_data"):
+            super().__setattr__(name, value)
+        else:
+            self._data[name] = value
+            self._save()
 
-    def set(self, key: str, value: Any) -> None:
-        self._file_data[key] = value
-        self.save()
+    def reset_to_defaults(self) -> None:
+        self._data = dict(DEFAULT_CONFIG)
+        self._save()
 
-    def __iter__(self):
-        return iter(self._chain)
+    def as_dict(self) -> Dict[str, Any]:
+        return dict(self._data)
