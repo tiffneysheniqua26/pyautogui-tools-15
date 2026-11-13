@@ -1,36 +1,36 @@
-import pyautogui
-import time
-import random
-from typing import Tuple, Callable
+import json
+import os
+from typing import Dict, Any
 
-def jitter_click(x: int, y: int, intensity: int = 2) -> None:
-    """Simulates human-like click drift by applying random offset."""
-    dx, dy = random.randint(-intensity, intensity), random.randint(-intensity, intensity)
-    pyautogui.click(x + dx, y + dy)
+DEFAULT_CONFIG = {
+    "interval": 0.1,
+    "button": "left",
+    "failsafe": True,
+    "clicks": 1
+}
 
-def smart_drag(start: Tuple[int, int], end: Tuple[int, int], steps: int = 10) -> None:
-    """Bezier-style interpolation for drag operations."""
-    pyautogui.moveTo(*start)
-    pyautogui.mouseDown()
-    for i in range(1, steps + 1):
-        progress = i / steps
-        curr_x = start[0] + (end[0] - start[0]) * progress
-        curr_y = start[1] + (end[1] - start[1]) * progress
-        pyautogui.moveTo(int(curr_x), int(curr_y))
-        time.sleep(0.01)
-    pyautogui.mouseUp()
+def load_app_config(filepath: str = "config.json") -> Dict[str, Any]:
+    """Reads configuration from disk or returns factory defaults."""
+    if not os.path.exists(filepath):
+        with open(filepath, "w") as f:
+            json.dump(DEFAULT_CONFIG, f, indent=4)
+        return DEFAULT_CONFIG
 
-def batch_sequence(tasks: list[Callable]) -> None:
-    """Chain executable tasks with randomized inter-action delay."""
-    for task in tasks:
-        task()
-        time.sleep(random.uniform(0.1, 0.5))
+    with open(filepath, "r") as f:
+        try:
+            user_config = json.load(f)
+            return {**DEFAULT_CONFIG, **user_config}
+        except json.JSONDecodeError:
+            return DEFAULT_CONFIG
 
-def safety_break(threshold: int = 500) -> None:
-    """Emergency halt triggers based on cursor velocity metrics."""
-    pos_a = pyautogui.position()
-    time.sleep(0.1)
-    pos_b = pyautogui.position()
-    dist = ((pos_b[0] - pos_a[0])**2 + (pos_b[1] - pos_a[1])**2)**0.5
-    if dist > threshold:
-        raise InterruptedError("Cursor movement threshold exceeded")
+def validate_config(cfg: Dict[str, Any]) -> bool:
+    """Duck-typed check to ensure autoclicker parameters are sane."""
+    try:
+        return float(cfg.get("interval", 0)) >= 0 and cfg.get("button") in ["left", "right", "middle"]
+    except (TypeError, ValueError):
+        return False
+
+if __name__ == "__main__":
+    config = load_app_config()
+    if validate_config(config):
+        print(f"Active config: {config}")
